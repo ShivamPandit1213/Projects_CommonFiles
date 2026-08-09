@@ -1,5 +1,32 @@
-GETTING STARTED
+Mandatory files — the project won't run without these three:
 
+package.json           declares @playwright/test as a dependency
+playwright.config.ts   tells the runner which browsers, testDir, baseURL
+tests/*.spec.ts        the actual tests — nothing to run without them
+
+The one command to remember:
+
+cd C:\Users\shiva\OneDrive\JavaSelenium\PAIMANA_Playwright_1.1
+npx playwright test
+
+Day-to-day variations:
+
+npx playwright test --project=chromium     fastest — one browser instead of three
+npx playwright test --ui                   best for writing and debugging tests
+npx playwright test --grep @smoke          quick subset only
+npx playwright show-report                 open the report after a run
+
+If you want to skip typing npx playwright test each time, open package.json and add a scripts section:
+
+"scripts": {
+  "test": "playwright test",
+  "test:ui": "playwright test --ui",
+  "test:smoke": "playwright test --grep @smoke"
+}
+
+Then it's just npm test or npm run test:ui from the project folder.
+  
+GETTING STARTED
 Run from the project root:
 
 npm install              install dependencies (first time only)
