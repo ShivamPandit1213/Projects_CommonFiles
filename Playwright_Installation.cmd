@@ -1,195 +1,285 @@
-Microsoft Windows [Version 10.0.26200.8973]
-(c) Microsoft Corporation. All rights reserved.
-
-C:\Users\shiva>mkdir playwright-learning && cd playwright-learning
-
-C:\Users\shiva\playwright-learning>npm init playwright@latest
-Need to install the following packages:
-create-playwright@1.17.139
-Ok to proceed? (y) y
-
-> npx
-> create-playwright
-
-Getting started with writing end-to-end tests with Playwright:
-Initializing project in '.'
-√ Do you want to use TypeScript or JavaScript? · TypeScript
-√ Where to put your end-to-end tests? · playwright
-√ Add a GitHub Actions workflow? (Y/n) · true
-√ Install Playwright browsers (can be done manually via 'npx playwright install')? (Y/n) · true
-Initializing NPM project (npm init -y)…
-Wrote to C:\Users\shiva\playwright-learning\package.json:
-
-{
-  "name": "playwright-learning",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs"
-}
+========================================================
+PLAYWRIGHT - COMPLETE COMMAND GUIDE
+========================================================
 
 
-Installing Playwright Test (npm install --save-dev @playwright/test)…
+THE ONE RULE
+------------
+Every command below must be run from the PROJECT FOLDER, never from
+C:\Users\shiva. Check the prompt before you type. It must read:
 
-added 3 packages, and audited 4 packages in 3s
+    C:\Users\shiva\OneDrive\JavaSelenium\PAIMANA_Playwright_1.1>
 
-found 0 vulnerabilities
-Installing Types (npm install --save-dev @types/node)…
+Shortcut: open the project folder in File Explorer, click the address bar,
+type cmd, press Enter. The terminal opens already in that folder.
 
-added 2 packages, and audited 6 packages in 1s
+Do NOT copy the prompt text itself. Type only what comes after the ">".
 
-found 0 vulnerabilities
-Writing playwright.config.ts.
-Writing .github\workflows\playwright.yml.
-Writing playwright\example.spec.ts.
-Writing package.json.
-Downloading browsers (npx playwright install)…
-Removing unused browser at C:\Users\shiva\AppData\Local\ms-playwright\chromium-1223
-Removing unused browser at C:\Users\shiva\AppData\Local\ms-playwright\chromium_headless_shell-1223
-Removing unused browser at C:\Users\shiva\AppData\Local\ms-playwright\firefox-1522
-Removing unused browser at C:\Users\shiva\AppData\Local\ms-playwright\webkit-2287
-Downloading Chrome for Testing 151.0.7922.34 (playwright chromium v1234) from https://cdn.playwright.dev/builds/cft/151.0.7922.34/win64/chrome-win64.zip
-191.8 MiB [====================] 100% 0.0s
-Chrome for Testing 151.0.7922.34 (playwright chromium v1234) downloaded to C:\Users\shiva\AppData\Local\ms-playwright\chromium-1234
-Downloading Chrome Headless Shell 151.0.7922.34 (playwright chromium-headless-shell v1234) from https://cdn.playwright.dev/builds/cft/151.0.7922.34/win64/chrome-headless-shell-win64.zip
-114.5 MiB [====================] 100% 0.0s
-Chrome Headless Shell 151.0.7922.34 (playwright chromium-headless-shell v1234) downloaded to C:\Users\shiva\AppData\Local\ms-playwright\chromium_headless_shell-1234
-Downloading Firefox 153.0 (playwright firefox v1538) from https://cdn.playwright.dev/dbazure/download/playwright/builds/firefox/1538/firefox-win64.zip
-119.9 MiB [====================] 100% 0.0s
-Firefox 153.0 (playwright firefox v1538) downloaded to C:\Users\shiva\AppData\Local\ms-playwright\firefox-1538
-Downloading WebKit 26.5 (playwright webkit v2336) from https://cdn.playwright.dev/dbazure/download/playwright/builds/webkit/2336/webkit-win64.zip
-59.6 MiB [====================] 100% 0.0s
-WebKit 26.5 (playwright webkit v2336) downloaded to C:\Users\shiva\AppData\Local\ms-playwright\webkit-2336
-✔ Success! Created a Playwright Test project at C:\Users\shiva\playwright-learning
 
-Inside that directory, you can run several commands:
+MANDATORY FILES
+---------------
+    package.json           declares @playwright/test as a dependency
+    playwright.config.ts   browsers, testDir, baseURL, reporters, timeouts
+    <testDir>/*.spec.ts    the actual tests
 
-  npx playwright test
-    Runs the end-to-end tests.
+testDir is set in playwright.config.ts and is not always "tests":
+    PAIMANA_Playwright_1.1  ->  testDir: './tests'
+    playwright-learning     ->  testDir: './playwright'
 
-  npx playwright test --ui
-    Starts the interactive UI mode.
 
-  npx playwright test --project=chromium
-    Runs the tests only on Desktop Chrome.
+========================================================
+STEP-BY-STEP: FIRST TIME
+========================================================
 
-  npx playwright test example
-    Runs the tests in a specific file.
+STEP 0 - CHECK PREREQUISITES
+    node -v      must be v18 or higher
+    npm -v
+    npx -v
+When: once per machine. If "not recognized", install Node.js LTS from
+nodejs.org, then close and reopen CMD.
 
-  npx playwright test --debug
-    Runs the tests in debug mode.
+STEP 1 - GO TO THE PROJECT
+    cd C:\Users\shiva\OneDrive\JavaSelenium\PAIMANA_Playwright_1.1
+    dir
+When: every new terminal session. "dir" must show package.json
+and playwright.config.ts.
 
-  npx playwright codegen
-    Auto generate tests with Codegen.
+STEP 2 - INSTALL DEPENDENCIES
+    npm install
+When: once per project, again after cloning from GitHub or whenever
+package.json changes. Creates node_modules/.
 
-We suggest that you begin by typing:
+STEP 3 - INSTALL BROWSERS
+    npx playwright install
+When: once per machine, and again if you see "Executable doesn't exist".
+Downloads ~500 MB to C:\Users\shiva\AppData\Local\ms-playwright.
+Silence means they are already downloaded.
 
+STEP 4 - CHECK VERSION
+    npx playwright --version
+When: confirming the CLI works, or reporting a bug.
+
+STEP 5 - VERIFY TESTS ARE FOUND
+    npx playwright test --list
+When: after setup, and after adding new test files. Expect
+"Total: 15 tests in 3 files". Zero means testDir is wrong.
+
+STEP 6 - RUN
     npx playwright test
 
-And check out the following files:
-  - .\playwright\example.spec.ts - Example end-to-end test
-  - .\playwright.config.ts - Playwright Test configuration
+STEP 7 - VIEW RESULTS
+    npx playwright show-report
+Opens localhost:9323. Ctrl+C then Y to stop the server.
 
-Visit https://playwright.dev/docs/intro for more information. ✨
 
-Happy hacking! 🎭
+========================================================
+RUN
+========================================================
+    npx playwright test                                       all tests, all 3 browsers
+    npx playwright test --project=chromium                    one browser - fastest
+    npx playwright test --project=firefox
+    npx playwright test --project=webkit                      Safari's engine
+    npx playwright test --project=chromium --project=firefox  two browsers
 
-C:\Users\shiva\playwright-learning>
-=====================================================================================
+When: --project=chromium for everyday development, it is roughly 3x faster.
+Run all three before pushing or releasing.
 
-STEP 0 — CHECK PREREQUISITES
 
-node -v      must be v18 or higher
-npm -v       comes with Node
-npx -v
+FILTER
+------
+    npx playwright test tests/home.spec.ts    one file
+    npx playwright test example               partial filename match
+    npx playwright test --grep @smoke         by tag - @smoke, @regression, @api
+    npx playwright test -g "login"            by test title
+    npx playwright test --list                list tests, don't run
 
-If node is not recognized, Node.js isn't installed. Download the LTS build from nodejs.org, install it, then close and reopen CMD — a new terminal is required to pick up the PATH change.
+When: while fixing one broken test, run only that file. In CI, --grep @smoke
+gives a fast gate on every commit and @regression runs nightly.
 
-STEP 1 — GO TO THE PROJECT FOLDER
 
-cd C:\Users\shiva\OneDrive\JavaSelenium\PAIMANA_Playwright_1.1
-dir
+DEBUG
+-----
+    npx playwright test --ui         interactive runner - best for writing tests
+    npx playwright test --headed     watch the browser
+    npx playwright test --debug      step through with inspector
 
-You must see package.json and playwright.config.ts. This step is mandatory — nearly every error comes from skipping it.
+When: --ui is where you should live day to day. --debug when one test fails
+and you need to pause on each line. --headed when you just want to see it.
 
-STEP 2 — INSTALL DEPENDENCIES
 
-npm install
+REPORT AND TRACE
+----------------
+    npx playwright show-report              open report from last run
+    npx playwright show-trace               open trace viewer (file picker)
+    npx playwright show-trace trace.zip     open a specific trace file
 
-Creates node_modules/. Run once per project, and again whenever package.json changes or after cloning from GitHub.
+When: show-report after any run. show-trace when a test failed in CI and you
+were not watching - the trace has a DOM snapshot timeline, network log, and
+console output for every step. Requires trace: 'on-first-retry' in the config.
 
-STEP 3 — INSTALL BROWSERS
 
-npx playwright install
+BROWSER AND RECORDER APPS
+-------------------------
+    npx playwright open                          browser + inspector, no recording
+    npx playwright open https://example.com      open a specific URL
+    npx playwright codegen                       record clicks, generate code
+    npx playwright codegen https://iigdev.uatnegd.online/home
+    npx playwright codegen <url> -o tests/login.spec.ts    write straight to a file
+    npx playwright codegen <url> -o codegen-output.ts      safer: scratch file
 
-Downloads Chromium, Firefox, WebKit (~500 MB) into C:\Users\shiva\AppData\Local\ms-playwright. Silence means they're already there.
+When: codegen to learn locator syntax or to bootstrap a new test fast. open
+to inspect an element's locator without recording.
 
-STEP 4 — CHECK VERSION
+WARNING: -o OVERWRITES the target file with no confirmation. Record to a
+scratch file, then copy the parts you want into your real spec. Add the
+scratch file to .gitignore.
 
-npx playwright --version
+Codegen records typing as well as clicking. If your generated code has
+.click() but no .fill(), you clicked the field without typing a value.
 
-Confirms the CLI is working. Compare against the version in package.json if something behaves unexpectedly.
 
-STEP 5 — VERIFY TESTS ARE FOUND
+INSTALL AND MAINTENANCE
+-----------------------
+    npx playwright install             download all browsers
+    npx playwright install chromium    download one browser only
+    npx playwright install-deps        OS-level dependencies (Linux / CI)
+    npx playwright clear-cache         clear the browser cache
+    npx playwright --version           check installed version
+    npx playwright --help              full command list
 
-npx playwright test --list
 
-Should print your 15 tests. If it says zero, testDir in the config doesn't match your actual folder.
+CREATE A NEW PROJECT FROM SCRATCH
+---------------------------------
+    mkdir playwright-learning && cd playwright-learning
+    npm init playwright@latest
 
-STEP 6 — RUN
+Four questions: TypeScript, test folder name, GitHub Actions workflow,
+install browsers. Writes package.json, playwright.config.ts, an example
+spec, and .github/workflows/playwright.yml.
 
-npx playwright test
 
-STEP 7 — VIEW RESULTS
+COMBINE
+-------
+Flags stack, which is where the real speed comes from:
 
-npx playwright show-report
+    npx playwright test --project=chromium --grep @smoke --headed
 
-Opens at localhost:9323. Ctrl+C then Y to stop the server.
 
-OPTIONAL — EXPLORE
+SHORTER COMMANDS (OPTIONAL)
+---------------------------
+Add to package.json:
 
-npx playwright test --ui                     interactive runner
-npx playwright open https://playwright.dev   browser + inspector
-npx playwright codegen https://playwright.dev  record clicks into code
+    "scripts": {
+      "test": "playwright test",
+      "test:ui": "playwright test --ui",
+      "test:smoke": "playwright test --grep @smoke"
+    }
 
-COMMON ERRORS AND FIXES
+Then: npm test  /  npm run test:ui
 
-EPERM ... scandir '...\Temp\WinSAT'
-  You're in C:\Users\shiva. cd into the project folder.
+
+========================================================
+COMING FROM SELENIUM
+========================================================
+    codegen        ~ Selenium IDE (record and generate)
+    test --ui      ~ a test runner GUI, no Selenium equivalent
+    show-trace     ~ post-mortem debugging, no Selenium equivalent
+    pages/         ~ Page Object Model, same concept you already know
+    fixtures/      ~ @BeforeMethod setup, but injected not inherited
+    playwright.config.ts  ~ testng.xml plus the config half of pom.xml
+
+Playwright prefers getByRole() over XPath. Role-based locators survive
+style and layout changes far better.
+
+
+========================================================
+COMMANDS THAT BLOCK THE TERMINAL
+========================================================
+These four keep running until you close them. Press Ctrl+C (then Y) to
+get your prompt back:
+
+    npx playwright open
+    npx playwright codegen
+    npx playwright show-report
+    npx playwright test --ui
+
+
+========================================================
+ERRORS AND FIXES
+========================================================
+
+EPERM: operation not permitted, scandir '...\Temp\WinSAT'
+    You are in C:\Users\shiva. cd into the project folder.
+
+ENOENT: no such file or directory, open 'C:\Users\shiva\tests\login.spec.ts'
+    Same cause - wrong folder, so the tests/ directory does not exist.
+    cd into the project first.
+
+'C:\Users\shiva' is not recognized as an internal or external command
+    You copied the prompt text along with the command.
+    Type only what comes after the ">".
 
 Cannot find module '@playwright/test'
-  Run: npm install
+    Run: npm install
 
 Executable doesn't exist at ...ms-playwright\chromium-XXXX
-  Run: npx playwright install
-  Happens when another project downloaded newer browser builds.
+    Run: npx playwright install
+    Happens when another project downloaded newer browser builds.
 
-Error: No tests found
-  testDir in playwright.config.ts doesn't match the real folder,
-  or your files aren't named *.spec.ts
+Error: No tests found  /  Total: 0 tests in 0 files
+    Wrong folder, or testDir in playwright.config.ts does not match
+    the real folder, or files are not named *.spec.ts
 
 'npx' is not recognized
-  Node.js not installed, or CMD not reopened after installing.
+    Node.js not installed, or CMD not reopened after installing.
 
 Timeout 30000ms exceeded
-  Site slow or locator wrong. Diagnose with: npx playwright test --debug
+    Site slow or locator wrong. Diagnose with: npx playwright test --debug
 
 EBUSY / EPERM mid-run
-  OneDrive syncing during the run. Pause sync or move the project out.
+    OneDrive syncing during the run. Pause sync or move the project
+    outside the synced folder.
 
 Port 9323 already in use
-  An old report server is running. Close it, or:
-  npx playwright show-report --port=9324
+    An old report server is still running. Close it, or:
+    npx playwright show-report --port=9324
 
-THE MINIMUM YOU EVER NEED AGAIN
+--config path doubled up
+    Do not pass --config when you are already inside the project folder.
+    Plain "npx playwright test" is all you need.
 
-Once set up, daily work is just two commands:
 
-cd C:\Users\shiva\OneDrive\JavaSelenium\PAIMANA_Playwright_1.1
-npx playwright test
+========================================================
+NOTES
+========================================================
+
+OneDrive
+    PAIMANA sits inside a synced folder. Sync can lock files mid-run.
+    Pause sync or move the project outside OneDrive if errors persist.
+
+Browser cache is global, not per project
+    Browsers live in C:\Users\shiva\AppData\Local\ms-playwright.
+    If a newer project downloads newer builds, older projects may print
+    "Removing unused browser" and need npx playwright install run again.
+
+chromium is not Chrome
+    It is the open-source engine behind Chrome and Edge. For real Chrome
+    or Edge, add projects with channel: 'chrome' or channel: 'msedge'
+    in playwright.config.ts.
+
+Captcha cannot be automated
+    The PAIMANA login has a 6-character verification code. It exists to
+    block automation. Ask the dev team to disable it on UAT or provide a
+    bypass value for test runs.
+
+.first() and .nth(1) in generated code
+    These mean more than one element matched. They are fragile - replace
+    with a scoped or exact locator by hand after recording.
+
+.gitignore
+    node_modules/
+    test-results/
+    playwright-report/
+    blob-report/
+    playwright/.cache/
+    codegen-output.ts
