@@ -4,7 +4,15 @@ Playwright + TypeScript end-to-end test suite
 5 tests across 3 browsers = 15 total runs
 ========================================================
 
+PowerShell: Browser Launch(Not headless): (PS C:\WINDOWS\System32>)
+cd C:\Users\shiva\OneDrive\JavaSelenium\PAIMANA_Playwright_1.1
+$env:HEADED=1
+npx playwright test tests/home.spec.ts --project=chromium
 
+Browser Launch(headless):
+npx playwright test
+npx playwright test --project=chromium
+    
 MANDATORY FILES
 ---------------
 The project will not run without these three:
