@@ -1,3 +1,11 @@
+Jenkins support: Jenkins supports 17 and 21 only
+Appium support: any latest version, but for Jenkins compatibility use JDK21
+
+Jenkins    17, 21     ← the binding constraint
+Appium     11+
+Selenium   11+
+TestNG     11+
+
 # Automation CLI Reference
 
 Command reference for Playwright (Node) and Cucumber (JVM + JS).
