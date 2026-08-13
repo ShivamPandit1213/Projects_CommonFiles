@@ -1,3 +1,15 @@
+JENKINS:
+@echo off
+echo Starting Jenkins with JDK 21...
+
+set "JAVA_HOME=C:\Program Files\Java\jdk-21.0.12"
+cd /d C:\Users\shiva\OneDrive\Jenkins
+
+"%JAVA_HOME%\bin\java" -jar jenkins.war
+pause
+=================================================================
+  
+GITHUB:
 Go to github.com → New repository → name it paimana_1point1
 
 Repository name:  paimana_1point1  ✓
