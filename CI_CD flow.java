@@ -7,6 +7,22 @@ cd /d C:\Users\shiva\OneDrive\Jenkins
 
 "%JAVA_HOME%\bin\java" -jar jenkins.war
 pause
+
+
+Jenkinsfile:- Type of file: Text Document (.txt)
+  
+cd C:\Users\shiva\OneDrive\JavaSelenium\paimana_1point1
+ren Jenkinsfile.txt Jenkinsfile
+dir Jenkinsfile
+  
+The dir should show Jenkinsfile with nothing after it. -> Then:
+
+git add Jenkinsfile
+git commit -m "Add Jenkinsfile"
+git push
+
+ File code paste in cmd: type Jenkinsfile
+  
 =================================================================
   
 GITHUB:
