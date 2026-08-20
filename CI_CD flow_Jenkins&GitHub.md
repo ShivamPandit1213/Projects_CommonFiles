@@ -20,6 +20,7 @@
    - [Remove specific files/folders](#remove-specific-filesfolders-from-tracking-without-deleting-them-locally)
 10. [Deleting a GitHub Repository](#10-deleting-a-github-repository)
 11. [Recovery Path — Repo Has Wrong Content Baked Into History](#11-recovery-path--repo-has-wrong-content-baked-into-history)
+12. [Isolating One Project from a Shared Parent Folder](#12-isolating-one-project-from-a-shared-parent-folder)
 
 Every section below ends with a **⬆ Back to top** link.
 
@@ -355,3 +356,132 @@ If a repo's commit history already contains the wrong files (rather than just th
 | 8 | `git remote add origin <new-repo-url>` |
 | 9 | `git branch -M main` (or `master`) |
 | 10 | `git push -u origin main` |
+
+[⬆ Back to top](#table-of-contents)
+
+---
+
+## 12. Isolating One Project from a Shared Parent Folder
+
+Use this when the parent folder (e.g. `JavaSelenium`) has an old `.git` that all subfolders have been inheriting from, and you want **only one specific subfolder** — such as `PAIMANA_PlaywrightMavenJavaSelenium` — to have its own clean, independent repo.
+
+**Symptom:** `git status` inside the parent folder lists dozens of unrelated project folders, and `git rev-parse --show-toplevel` from inside your target subfolder prints the *parent's* path instead of its own.
+
+### Step 1 — Remove everything else from the parent repo first
+
+Before touching your target project, stop the parent repo from tracking every other folder in it.
+
+```bash
+cd C:\Users\shiva\OneDrive\JavaSelenium
+git status
+```
+
+Review the list, then unstage or remove tracking for folders you don't want here:
+
+```bash
+git restore --staged <folder-name>
+```
+
+Repeat for each staged folder that isn't your target project. Then permanently exclude all of them so they never get re-added by accident — create or edit `.gitignore` in `JavaSelenium` and list every folder except the one you're keeping:
+
+```
+paimana-automation_1.1/
+paimana_1point1/
+PAIMANA_Cucumber/
+PAIMANA_Cucumber_1.1/
+PAIMANA_PlaywrightJavaSelenium/
+PAIMANA_PlaywrightTypeScript/
+Appium/
+Cypress/
+Playwright/
+Playwright_TestNG/
+... (add every other project folder here)
+```
+
+Do **not** add `PAIMANA_PlaywrightMavenJavaSelenium/` to this list — that's the one folder you want tracked.
+
+Confirm the parent has no dangling remote pointing at the wrong GitHub repo:
+
+```bash
+git remote -v
+```
+
+Should print nothing. If it shows a URL, remove it:
+
+```bash
+git remote remove origin
+```
+
+The parent repo itself is not being deleted here — just cleared of everything except optionally your target project, or left entirely unused going forward.
+
+### Step 2 — Give the target project its own independent repo
+
+```bash
+cd C:\Users\shiva\OneDrive\JavaSelenium\PAIMANA_PlaywrightMavenJavaSelenium
+dir /a:h .git
+```
+
+If this says **File Not Found**, the folder has no repo of its own yet — proceed.
+
+```bash
+git init
+dir /a:h .git
+git rev-parse --show-toplevel
+```
+
+`git rev-parse` must now print **this project's own path**, not the parent's. This is the check that confirms isolation actually worked.
+
+### Step 3 — Stage, verify, and commit only this project
+
+```bash
+git add .
+git status
+```
+
+Every path listed must start with `src/`, `suites/`, `pom.xml`, etc. — **no `../`** prefix anywhere. If `../` appears, `git init` did not run in the right folder — go back to Step 2.
+
+```bash
+git commit -m "Initial commit: PAIMANA Playwright Java Maven project"
+```
+
+### Step 4 — Delete the old GitHub repo and create a fresh one
+
+The existing `PAIMANA_PlaywrightMavenJavaSelenium` repo on GitHub has the wrong content baked into its history — delete and recreate rather than trying to fix it in place.
+
+1. github.com → open the repo → **Settings** → **Danger Zone** → **Delete this repository** → type the name to confirm
+2. **New repository** → same name → Private → no README/gitignore/license
+
+### Step 5 — Link and push
+
+```bash
+git remote add origin https://github.com/ShivamPandit1213/PAIMANA_PlaywrightMavenJavaSelenium.git
+git remote -v
+git branch -M master
+git push -u origin master
+```
+
+### Step 6 — Verify
+
+```bash
+git log --oneline
+git status
+```
+
+`git status` should say `Your branch is up to date with 'origin/master'`. Refresh the GitHub page — the file list should show **only** `src`, `suites`, `pom.xml`, `README.md`, `.classpath`, `.project`, `.settings`, `.gitignore`.
+
+### Summary table
+
+| Step | Command | Where |
+|---|---|---|
+| 1 | `git status` → `git restore --staged <folder>` for each unwanted folder | `JavaSelenium` |
+| 2 | Add unwanted folders to `.gitignore` | `JavaSelenium` |
+| 3 | `git remote -v` → `git remote remove origin` if needed | `JavaSelenium` |
+| 4 | `dir /a:h .git` — confirm no repo exists yet | Target project folder |
+| 5 | `git init` | Target project folder |
+| 6 | `git rev-parse --show-toplevel` — confirm it prints the project's own path | Target project folder |
+| 7 | `git add .` → `git status` — confirm no `../` paths | Target project folder |
+| 8 | `git commit -m "Initial commit"` | Target project folder |
+| 9 | Delete + recreate the GitHub repo | github.com |
+| 10 | `git remote add origin <url>` → `git branch -M master` → `git push -u origin master` | Target project folder |
+
+[⬆ Back to top](#table-of-contents)
