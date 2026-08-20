@@ -1,7 +1,5 @@
 # PAIMANA — Jenkins & GitHub Command Reference
 
-[⬆ Back to top](#table-of-contents)
-
 ---
 
 ## Table of Contents
@@ -10,19 +8,20 @@
    - [Start Jenkins with JDK 21](#start-jenkins-with-jdk-21)
    - [Fixing Jenkinsfile.txt → Jenkinsfile](#fixing-jenkinsfiletxt--jenkinsfile)
 2. [Creating a New GitHub Repository](#2-creating-a-new-github-repository)
-3. [Fixing a Hijacked Parent Remote](#3-fixing-a-hijacked-parent-remote)
-4. [Linking a Project to GitHub and Pushing](#4-linking-a-project-to-github-and-pushing)
-5. [Full Setup — Every New Project, Step by Step](#5-full-setup--every-new-project-step-by-step)
-6. [Verification Commands](#6-verification-commands--use-before-every-commitpush)
-7. [Day-to-Day Workflow](#7-day-to-day-workflow-after-initial-setup)
-8. [Quick Reference — Command Purpose Table](#8-quick-reference--command-purpose-table)
-9. [Deleting a GitHub Repository](#9-deleting-a-github-repository)
-10. [Undoing / Reverting Pushes](#10-undoing--reverting-pushes)
+3. [Verify: Remote Linked, Committed, and Pushed Correctly](#3-verify-remote-linked-committed-and-pushed-correctly)
+4. [Full Setup — Every New Project, Step by Step](#4-full-setup--every-new-project-step-by-step)
+5. [Verification Commands](#5-verification-commands--use-before-every-commitpush)
+6. [Day-to-Day Workflow](#6-day-to-day-workflow-after-initial-setup)
+7. [Quick Reference — Command Purpose Table](#7-quick-reference--command-purpose-table)
+   - [Staging a single file](#staging-a-single-file--why-quote-the-filename)
+   - [Managing remotes](#managing-remotes--the-three-commands-together)
+8. [Troubleshooting: Fixing a Hijacked Parent Remote](#8-troubleshooting-fixing-a-hijacked-parent-remote)
+9. [Undoing / Reverting Pushes](#9-undoing--reverting-pushes)
+   - [Remove specific files/folders](#remove-specific-filesfolders-from-tracking-without-deleting-them-locally)
+10. [Deleting a GitHub Repository](#10-deleting-a-github-repository)
 11. [Recovery Path — Repo Has Wrong Content Baked Into History](#11-recovery-path--repo-has-wrong-content-baked-into-history)
 
-[⬆ Back to top](#paimana--jenkins--github-command-reference) — this link appears at the end of every section below.
-
-[⬆ Back to top](#table-of-contents)
+Every section below ends with a **⬆ Back to top** link.
 
 ---
 
@@ -91,36 +90,24 @@ Leave README/.gitignore/license off whenever you already have local commits — 
 
 ---
 
-## 3. Fixing a Hijacked Parent Remote
+## 3. Verify: Remote Linked, Committed, and Pushed Correctly
 
-If a subfolder never got its own `.git` and inherited a parent folder's repo instead, clean the parent first.
+Run these checks any time after a push — don't assume it worked just because no error appeared.
 
-```bash
-cd C:\Users\shiva\OneDrive\JavaSelenium
-git remote -v
-git remote remove origin
-```
+| Check | Command | Expected result |
+|---|---|---|
+| Is a remote linked? | `git remote -v` | Shows your GitHub URL for both `(fetch)` and `(push)` — **not empty, not someone else's repo** |
+| Was the commit saved? | `git log --oneline` | Shows your commit message at the top — confirms it's not still sitting unstaged |
+| Is upstream tracking set? | `git status` | Says `Your branch is up to date with 'origin/main'` — confirms the push actually linked this branch to GitHub, not just uploaded once |
+| Did everything actually land on GitHub? | Refresh the repo page in your browser | File list matches what's in your project folder — no leftover files from a different project |
 
-`git remote -v` after removal should print **nothing** — that confirms it's cleared.
-
-[⬆ Back to top](#table-of-contents)
-
----
-
-## 4. Linking a Project to GitHub and Pushing
-
-```bash
-cd C:\Users\shiva\OneDrive\JavaSelenium\paimana_1point1
-git remote add origin https://github.com/ShivamPandit1213/paimana_1point1.git
-git branch -M main
-git push -u origin main
-```
+If `git remote -v` shows a URL that isn't yours, or `git status` doesn't mention `origin/main`, stop here — something is misconfigured, and pushing further will make it worse. See [Section 8](#8-troubleshooting-fixing-a-hijacked-parent-remote) if the URL points at the wrong repo.
 
 [⬆ Back to top](#table-of-contents)
 
 ---
 
-## 5. Full Setup — Every New Project, Step by Step
+## 4. Full Setup — Every New Project, Step by Step
 
 Run this exact sequence any time you start a new project and want it as its own GitHub repo.
 
@@ -163,11 +150,13 @@ Check your current branch name first if unsure:
 git branch
 ```
 
+After step 9, run the checks in [Section 3](#3-verify-remote-linked-committed-and-pushed-correctly) above to confirm everything actually landed.
+
 [⬆ Back to top](#table-of-contents)
 
 ---
 
-## 6. Verification Commands — Use Before Every Commit/Push
+## 5. Verification Commands — Use Before Every Commit/Push
 
 | Command | What it tells you |
 |---|---|
@@ -185,7 +174,7 @@ git branch
 
 ---
 
-## 7. Day-to-Day Workflow (After Initial Setup)
+## 6. Day-to-Day Workflow (After Initial Setup)
 
 Once `origin` and upstream tracking are set, every future change is three commands:
 
@@ -201,7 +190,7 @@ No `-u origin main` needed again — upstream is already remembered.
 
 ---
 
-## 8. Quick Reference — Command Purpose Table
+## 7. Quick Reference — Command Purpose Table
 
 | When | Command |
 |---|---|
@@ -211,11 +200,13 @@ No `-u origin main` needed again — upstream is already remembered.
 | Confirm repo is isolated (not inherited) | `git rev-parse --show-toplevel` |
 | Confirm `.git` physically exists | `dir /a:h .git` |
 | Stage all changes | `git add .` |
-| Stage one specific file | `git add <filename>` |
+| Stage one specific file | `git add "filename.ext"` — e.g. `git add "playwright.config.ts"` |
+| Stage multiple specific files | `git add "file1.ts" "file2.ts"` |
 | Check what's staged/unstaged | `git status` |
 | Commit staged changes | `git commit -m "message"` |
 | Link to GitHub | `git remote add origin <url>` |
-| Check/remove a remote | `git remote -v` / `git remote remove origin` |
+| Check which remote(s) are linked | `git remote -v` |
+| Remove a remote | `git remote remove origin` |
 | Rename branch | `git branch -M main` (or `master`) |
 | Check current branch | `git branch` |
 | Push and set tracking (first time) | `git push -u origin main` |
@@ -226,27 +217,74 @@ No `-u origin main` needed again — upstream is already remembered.
 | Rename a file (Windows) | `ren OldName NewName` |
 | View a file's content in CMD | `type filename` |
 
+### Staging a single file — why quote the filename
+
+Quotes matter whenever a filename has spaces or special characters — common in this project set (e.g. `"Coolections and Arrays"`). Without quotes, CMD treats each space-separated word as a *separate* argument and Git tries to stage files that don't exist.
+
+```bash
+git add "Jenkinsfile"
+git add "playwright.config.ts"
+git add "src/main/java/com/paimana/pages/HomePage.java"
+```
+
+Quotes are optional for simple filenames with no spaces, but using them every time removes the guesswork.
+
+### Managing remotes — the three commands together
+
+These three are used as a set whenever a repo is linked to the wrong GitHub URL, or you need to check/replace it.
+
+| Step | Command | Result |
+|---|---|---|
+| 1. Check what's currently linked | `git remote -v` | Prints the URL for `(fetch)` and `(push)` — or nothing, if none is set |
+| 2. Remove it | `git remote remove origin` | Unlinks the repo from that URL — local commits are untouched |
+| 3. Re-link to the correct URL | `git remote add origin <correct-url>` | Points the repo at the right GitHub repository |
+
+Full walkthrough of when and why to use this sequence: see [Section 8 — Troubleshooting: Fixing a Hijacked Parent Remote](#8-troubleshooting-fixing-a-hijacked-parent-remote).
+
 [⬆ Back to top](#table-of-contents)
 
 ---
 
-## 9. Deleting a GitHub Repository
+## 8. Troubleshooting: Fixing a Hijacked Parent Remote
 
-Use when a repo was created by mistake or ended up with the wrong content (e.g. it inherited files from a parent folder's `.git`).
+**Symptom:** you run `git push` inside a project subfolder, but GitHub shows files from *other* projects too — or a `git status` inside your project shows paths prefixed with `../`.
 
-1. Open the repo on GitHub → **Settings** (top nav)
-2. Scroll to the bottom → **Danger Zone**
-3. Click **Delete this repository**
-4. Type the full name to confirm: `owner/repo-name`
-5. Click **I understand the consequences, delete this repository**
+**Cause:** the subfolder never had its own `.git`. Git walked up the directory tree and found a `.git` in a *parent* folder instead, so every command has actually been operating on the parent repo — which may contain many unrelated projects.
 
-There is no undo. Only delete a repo you're certain you want gone — if in doubt, make it private instead.
+**Check first — is this your problem?**
+
+```bash
+cd <project-folder>
+git rev-parse --show-toplevel
+```
+
+If this prints the *parent* folder's path instead of your project's own path, you've found the cause.
+
+**Fix — clean the parent, then give the project its own repo:**
+
+```bash
+cd <parent-folder>
+git remote -v
+git remote remove origin
+```
+
+`git remote -v` after removal should print **nothing** — confirms it's cleared. Then set up the project folder properly using [Section 4](#4-full-setup--every-new-project-step-by-step) above.
 
 [⬆ Back to top](#table-of-contents)
 
 ---
 
-## 10. Undoing / Reverting Pushes
+## 9. Undoing / Reverting Pushes
+
+### Remove specific files/folders from tracking without deleting them locally
+
+Use this when a commit accidentally included the wrong folder (e.g. a sibling project nested inside) — the most common cause of the "wrong content" problem in this doc.
+
+```bash
+git rm -r --cached <folder-or-file>
+git commit -m "Remove folder from tracking"
+git push
+```
 
 ### Safest — revert the last commit with a new commit
 
@@ -267,16 +305,6 @@ git reset --hard <commit-hash-to-go-back-to>
 git push --force
 ```
 
-### Remove specific files/folders from tracking without deleting them locally
-
-Use this when a commit accidentally included the wrong folder (e.g. a sibling project nested inside).
-
-```bash
-git rm -r --cached <folder-or-file>
-git commit -m "Remove folder from tracking"
-git push
-```
-
 ### Undo the last local commit before it's pushed
 
 Uncommits but keeps changes staged, ready to recommit correctly.
@@ -290,6 +318,22 @@ git reset --soft HEAD~1
 ```bash
 git checkout -- .
 ```
+
+[⬆ Back to top](#table-of-contents)
+
+---
+
+## 10. Deleting a GitHub Repository
+
+Use when a repo was created by mistake or ended up with the wrong content (e.g. it inherited files from a parent folder's `.git`).
+
+1. Open the repo on GitHub → **Settings** (top nav)
+2. Scroll to the bottom → **Danger Zone**
+3. Click **Delete this repository**
+4. Type the full name to confirm: `owner/repo-name`
+5. Click **I understand the consequences, delete this repository**
+
+There is no undo. Only delete a repo you're certain you want gone — if in doubt, make it private instead.
 
 [⬆ Back to top](#table-of-contents)
 
