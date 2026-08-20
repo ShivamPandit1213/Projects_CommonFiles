@@ -36,6 +36,10 @@ Add license:      No license       ✓
 
 
 In CMD:
+Navigate to Parent Folder:    C:\Users\shiva\OneDrive\JavaSelenium
+  Confirms no remote remains (should print nothing):    git remote -v
+	Removes the wrong GitHub link from parent repo:    git remote remove origin
+  
 cd C:\Users\shiva\OneDrive\JavaSelenium\paimana_1point1
 git remote add origin https://github.com/ShivamPandit1213/paimana_1point1.git
 git branch -M main
@@ -44,11 +48,18 @@ git push -u origin main
 For your other projects, the full sequence each time:
 
 cd <project folder>
-git init
-git add .
+	Creates a new, separate .git here :    git init
+  	Confirms .git now exists locally (not inherited from parent):    dir /a:h .git
+Stages only this project's files:    git add .
+  	Verify paths show as src/..., pom.xml — no ../:    git status
+  Saves the first commit:    git commit -m "Initial commit: PAIMANA Playwright Java Maven project"
+  
 git commit -m "Initial commit"
 git remote add origin <url from GitHub>
 git push -u origin main
+
+  Sets branch name:    	git branch -M master
+  	Uploads commit, sets tracking:    	git push -u origin master
 =================================================================
 From now on, this project's workflow is three commands:
 
