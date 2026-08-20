@@ -382,18 +382,21 @@ None of the three alone is sufficient here — **use all three, in this order**:
 ```bash
 cd C:\Users\shiva\OneDrive\JavaSelenium
 
-# 1. Unstage first — undo anything pending commit
+# 1. Unstage first (undo the pending commit)
 git restore --staged paimana-automation_1.1
 git restore --staged paimana_1point1
 
-# 2. Remove from tracking — stop watching, keep files on disk
+# 2. Remove from tracking (stop watching them, keep files on disk)
 git rm -r --cached paimana-automation_1.1
 git rm -r --cached paimana_1point1
+
+# 3. Ignore permanently (stop them resurfacing, ever)
+# — add all 55 folder names to .gitignore, as listed below
 ```
 
-For every other folder currently listed as "Untracked files" in `git status`, skip Unstage/Remove (they were never tracked) and go straight to Ignore — add each one to `.gitignore` in the next step.
+For every other folder currently listed as "Untracked files" in `git status`, skip Unstage/Remove (they were never tracked) and go straight to Ignore — add each one to `.gitignore` below.
 
-Then permanently exclude everything so none of it resurfaces — create or edit `.gitignore` in `JavaSelenium` and list every folder except the one you're keeping:
+Create or edit `.gitignore` in `JavaSelenium` and list every folder except the one you're keeping:
 
 ```
 paimana-automation_1.1/
