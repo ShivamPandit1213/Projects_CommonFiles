@@ -1,5 +1,29 @@
 # PAIMANA — Jenkins & GitHub Command Reference
 
+[⬆ Back to top](#table-of-contents)
+
+---
+
+## Table of Contents
+
+1. [Jenkins](#1-jenkins)
+   - [Start Jenkins with JDK 21](#start-jenkins-with-jdk-21)
+   - [Fixing Jenkinsfile.txt → Jenkinsfile](#fixing-jenkinsfiletxt--jenkinsfile)
+2. [Creating a New GitHub Repository](#2-creating-a-new-github-repository)
+3. [Fixing a Hijacked Parent Remote](#3-fixing-a-hijacked-parent-remote)
+4. [Linking a Project to GitHub and Pushing](#4-linking-a-project-to-github-and-pushing)
+5. [Full Setup — Every New Project, Step by Step](#5-full-setup--every-new-project-step-by-step)
+6. [Verification Commands](#6-verification-commands--use-before-every-commitpush)
+7. [Day-to-Day Workflow](#7-day-to-day-workflow-after-initial-setup)
+8. [Quick Reference — Command Purpose Table](#8-quick-reference--command-purpose-table)
+9. [Deleting a GitHub Repository](#9-deleting-a-github-repository)
+10. [Undoing / Reverting Pushes](#10-undoing--reverting-pushes)
+11. [Recovery Path — Repo Has Wrong Content Baked Into History](#11-recovery-path--repo-has-wrong-content-baked-into-history)
+
+[⬆ Back to top](#paimana--jenkins--github-command-reference) — this link appears at the end of every section below.
+
+[⬆ Back to top](#table-of-contents)
+
 ---
 
 ## 1. Jenkins
@@ -45,6 +69,8 @@ git commit -m "Add Jenkinsfile"
 git push
 ```
 
+[⬆ Back to top](#table-of-contents)
+
 ---
 
 ## 2. Creating a New GitHub Repository
@@ -61,6 +87,8 @@ Go to **github.com → New repository**
 
 Leave README/.gitignore/license off whenever you already have local commits — GitHub creating its own copy causes a conflict on first push.
 
+[⬆ Back to top](#table-of-contents)
+
 ---
 
 ## 3. Fixing a Hijacked Parent Remote
@@ -75,6 +103,8 @@ git remote remove origin
 
 `git remote -v` after removal should print **nothing** — that confirms it's cleared.
 
+[⬆ Back to top](#table-of-contents)
+
 ---
 
 ## 4. Linking a Project to GitHub and Pushing
@@ -85,6 +115,8 @@ git remote add origin https://github.com/ShivamPandit1213/paimana_1point1.git
 git branch -M main
 git push -u origin main
 ```
+
+[⬆ Back to top](#table-of-contents)
 
 ---
 
@@ -131,6 +163,8 @@ Check your current branch name first if unsure:
 git branch
 ```
 
+[⬆ Back to top](#table-of-contents)
+
 ---
 
 ## 6. Verification Commands — Use Before Every Commit/Push
@@ -147,6 +181,8 @@ git branch
 | `git diff` | Shows exact line changes before staging |
 | `git ls-files` | Lists every file Git is currently tracking — ground truth of what will be pushed |
 
+[⬆ Back to top](#table-of-contents)
+
 ---
 
 ## 7. Day-to-Day Workflow (After Initial Setup)
@@ -160,6 +196,8 @@ git push
 ```
 
 No `-u origin main` needed again — upstream is already remembered.
+
+[⬆ Back to top](#table-of-contents)
 
 ---
 
@@ -187,3 +225,89 @@ No `-u origin main` needed again — upstream is already remembered.
 | List all tracked files | `git ls-files` |
 | Rename a file (Windows) | `ren OldName NewName` |
 | View a file's content in CMD | `type filename` |
+
+[⬆ Back to top](#table-of-contents)
+
+---
+
+## 9. Deleting a GitHub Repository
+
+Use when a repo was created by mistake or ended up with the wrong content (e.g. it inherited files from a parent folder's `.git`).
+
+1. Open the repo on GitHub → **Settings** (top nav)
+2. Scroll to the bottom → **Danger Zone**
+3. Click **Delete this repository**
+4. Type the full name to confirm: `owner/repo-name`
+5. Click **I understand the consequences, delete this repository**
+
+There is no undo. Only delete a repo you're certain you want gone — if in doubt, make it private instead.
+
+[⬆ Back to top](#table-of-contents)
+
+---
+
+## 10. Undoing / Reverting Pushes
+
+### Safest — revert the last commit with a new commit
+
+Keeps history intact. Safe even if others have already pulled the bad commit.
+
+```bash
+git revert HEAD
+git push
+```
+
+### Rewrite history — reset to an earlier commit, then force-push
+
+Only do this if certain no one else has pulled the bad commits. This overwrites GitHub's history.
+
+```bash
+git log --oneline
+git reset --hard <commit-hash-to-go-back-to>
+git push --force
+```
+
+### Remove specific files/folders from tracking without deleting them locally
+
+Use this when a commit accidentally included the wrong folder (e.g. a sibling project nested inside).
+
+```bash
+git rm -r --cached <folder-or-file>
+git commit -m "Remove folder from tracking"
+git push
+```
+
+### Undo the last local commit before it's pushed
+
+Uncommits but keeps changes staged, ready to recommit correctly.
+
+```bash
+git reset --soft HEAD~1
+```
+
+### Discard all local uncommitted changes
+
+```bash
+git checkout -- .
+```
+
+[⬆ Back to top](#table-of-contents)
+
+---
+
+## 11. Recovery Path — Repo Has Wrong Content Baked Into History
+
+If a repo's commit history already contains the wrong files (rather than just the working directory), delete-and-recreate is simpler than surgical fixes.
+
+| Step | Command / Action |
+|---|---|
+| 1 | Delete the repo on GitHub (Settings → Danger Zone) |
+| 2 | Create a new empty repo, same name, no README/gitignore/license |
+| 3 | `cd <project-folder>` |
+| 4 | `dir /a:h .git` — confirm it has its own `.git`, separate from any parent |
+| 5 | `git add .` |
+| 6 | `git status` — confirm no `../` paths appear |
+| 7 | `git commit -m "Initial commit"` |
+| 8 | `git remote add origin <new-repo-url>` |
+| 9 | `git branch -M main` (or `master`) |
+| 10 | `git push -u origin main` |
