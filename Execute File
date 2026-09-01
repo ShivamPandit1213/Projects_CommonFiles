@@ -1,0 +1,21 @@
+TestNG
+via CMD:
+PowerShell / cmd — from the project folder:
+  cd C:\Users\shiva\OneDrive\JavaSelenium\jobApply_Naukri
+  mvn clean test
+Without changing directory:
+  mvn -f C:\Users\shiva\OneDrive\JavaSelenium\jobApply_Naukri\pom.xml clean test
+Run a different suite file (the property is overridable):
+  mvn test -DsuiteXmlFile=suite/regression.xml
+Explicit override, ignoring the pom's default:
+  mvn test -Dsurefire.suiteXmlFiles=suite/testng.xml
+===============================================================================
+Maven
+
+Java
+
+Playwright
+
+Cucumber
+
+Cypress
