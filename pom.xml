@@ -1,0 +1,105 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.paimana</groupId>
+  <artifactId>paimana_1point1</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+  <packaging>jar</packaging>
+
+  <name>paimana_1point1</name>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.release>21</maven.compiler.release>
+    <maven.compiler.source>21</maven.compiler.source>
+    <maven.compiler.target>21</maven.compiler.target>
+
+    <!-- Versions as properties: one place to upgrade. -->
+    <selenium.version>4.48.0</selenium.version>
+    <testng.version>7.12.0</testng.version>
+    <jackson.version>2.22.2</jackson.version>
+    <surefire.version>3.5.6</surefire.version>
+    <exec.plugin.version>3.6.2</exec.plugin.version>
+
+    <!-- Which suite runs. Override: mvn test -DsuiteFile=suites/config.xml -->
+    <suiteFile>suites/smoke.xml</suiteFile>
+
+    <!-- Blank defaults for the keys forwarded into the forked test JVM below.
+         A property with no default would interpolate to the literal text
+         "${app.baseUrl}", which PropertyReader would then treat as a real
+         value and hand to driver.get(). Blank counts as unset, so the reader
+         falls through to config.properties as intended. -->
+    <env/>
+    <app.baseUrl/>
+    <browser.name/>
+    <browser.headless/>
+  </properties>
+
+  <dependencies>
+    <!-- Compile scope, not test: PropertyReader and the driver/page classes all
+         live in src/main and return Selenium types. Driver binaries are resolved
+         by Selenium Manager (built in since 4.6), so there is nothing to
+         download or put on PATH. -->
+    <dependency>
+      <groupId>org.seleniumhq.selenium</groupId>
+      <artifactId>selenium-java</artifactId>
+      <version>${selenium.version}</version>
+    </dependency>
+
+    <!-- Compile scope, not test: UserRepository parses users.json and
+         CaptchaReader parses the captcha endpoint's response, and both live in
+         src/main. User and UserRepository also carry Jackson annotations on
+         their public API. -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>${jackson.version}</version>
+      <scope>compile</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.testng</groupId>
+      <artifactId>testng</artifactId>
+      <version>${testng.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>${surefire.version}</version>
+        <configuration>
+          <!-- Without this, Surefire runs every @Test class it can find and the
+               suite XML is ignored, including the groups it excludes. -->
+          <suiteXmlFiles>
+            <suiteXmlFile>${suiteFile}</suiteXmlFile>
+          </suiteXmlFiles>
+          <!-- Surefire forks a separate JVM, which does NOT inherit -D values
+               from the mvn command line. Without forwarding them here, every
+               `mvn test -Dbrowser.name=firefox` would be silently ignored and
+               the run would fall back to the committed defaults. -->
+          <systemPropertyVariables>
+            <env>${env}</env>
+            <app.baseUrl>${app.baseUrl}</app.baseUrl>
+            <browser.name>${browser.name}</browser.name>
+            <browser.headless>${browser.headless}</browser.headless>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
+
+      <!-- Backs the `mvn exec:java` commands documented on ManualLogin and
+           CaptchaReader. Both are interactive developer tools for the CAPTCHA
+           blocker, so there is no <execution> binding them to a lifecycle
+           phase — they are only ever invoked by hand. -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>${exec.plugin.version}</version>
+      </plugin>
+    </plugins>
+  </build>
+</project>
