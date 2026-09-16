@@ -15,6 +15,8 @@
 7. [Quick Reference — Command Purpose Table](#7-quick-reference--command-purpose-table)
    - [Staging a single file](#staging-a-single-file--why-quote-the-filename)
    - [Managing remotes](#managing-remotes--the-three-commands-together)
+   - [Creating a new branch](#creating-a-new-branch--create-switch-then-push)
+   - [Checking how many branches the GitHub repo has](#checking-how-many-branches-the-github-repo-has)
 8. [Troubleshooting: Fixing a Hijacked Parent Remote](#8-troubleshooting-fixing-a-hijacked-parent-remote)
 9. [Undoing / Reverting Pushes](#9-undoing--reverting-pushes)
    - [Remove specific files/folders](#remove-specific-filesfolders-from-tracking-without-deleting-them-locally)
@@ -210,6 +212,15 @@ No `-u origin main` needed again — upstream is already remembered.
 | Remove a remote | `git remote remove origin` |
 | Rename branch | `git branch -M main` (or `master`) |
 | Check current branch | `git branch` |
+| Create a new branch and switch to it | `git checkout -b <branch-name>` (or `git switch -c <branch-name>`) |
+| Create a branch without switching to it | `git branch <branch-name>` |
+| Switch to an existing branch | `git checkout <branch-name>` (or `git switch <branch-name>`) |
+| Push a new branch to GitHub (first time) | `git push -u origin <branch-name>` |
+| List branches on GitHub (remote) | `git branch -r` |
+| List all branches (local + remote) | `git branch -a` |
+| Ask GitHub directly for its branch list | `git ls-remote --heads origin` |
+| Count how many branches are on GitHub | `git ls-remote --heads origin \| find /c "refs/heads/"` |
+| Refresh remote branch list (drop deleted ones) | `git fetch --prune` |
 | Push and set tracking (first time) | `git push -u origin main` |
 | Push (after tracking is set) | `git push` |
 | View commit history | `git log --oneline` |
@@ -241,6 +252,48 @@ These three are used as a set whenever a repo is linked to the wrong GitHub URL,
 | 3. Re-link to the correct URL | `git remote add origin <correct-url>` | Points the repo at the right GitHub repository |
 
 Full walkthrough of when and why to use this sequence: see [Section 8 — Troubleshooting: Fixing a Hijacked Parent Remote](#8-troubleshooting-fixing-a-hijacked-parent-remote).
+
+### Creating a new branch — create, switch, then push
+
+A new branch exists only on your machine until it is pushed. Three steps every time:
+
+```bash
+git checkout -b feature-login
+git branch
+git push -u origin feature-login
+```
+
+| Step | Command | Result |
+|---|---|---|
+| 1. Create and switch | `git checkout -b <branch-name>` | Creates the branch from your current commit and switches to it in one go. Newer Git also accepts `git switch -c <branch-name>` — same result |
+| 2. Verify | `git branch` | The `*` should sit next to the new branch name — confirms you're on it before committing anything |
+| 3. Push and set tracking | `git push -u origin <branch-name>` | Uploads the branch to GitHub and links it, so plain `git push` works from then on — same idea as step 9 in [Section 4](#4-full-setup--every-new-project-step-by-step) |
+
+`git branch <branch-name>` on its own creates the branch but leaves you on the current one — switch to it with `git checkout <branch-name>` (or `git switch <branch-name>`) when ready.
+
+Branch names can't contain spaces — use hyphens (`feature-login`) or slashes (`feature/login`).
+
+### Checking how many branches the GitHub repo has
+
+`git branch` on its own lists **local** branches only — it says nothing about what's on GitHub. Use these instead:
+
+| Command | What it shows |
+|---|---|
+| `git branch -r` | Remote branches as of your **last fetch** — each listed as `origin/<name>` |
+| `git branch -a` | Local **and** remote branches together — local ones plain, remote ones prefixed `remotes/origin/` |
+| `git ls-remote --heads origin` | Asks GitHub **right now** for every branch it has, one per line — no fetch needed, always current |
+| `git ls-remote --heads origin \| find /c "refs/heads/"` | Same query, but prints just the **number** of branches (Windows CMD). In Git Bash use `\| wc -l` instead |
+
+`git branch -r` can be stale — a branch deleted on GitHub still shows up until you refresh the list:
+
+```bash
+git fetch --prune
+git branch -r
+```
+
+`git ls-remote --heads origin` never has this problem because it talks to GitHub directly, so it's the one to trust when the exact number matters.
+
+**Browser check:** open the repo on github.com — the count is shown next to the branch dropdown (e.g. **3 Branches**). Click it to see every branch, who last committed to it, and how far ahead/behind the default branch it is.
 
 [⬆ Back to top](#table-of-contents)
 
