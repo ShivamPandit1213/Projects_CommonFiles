@@ -23,6 +23,7 @@
 10. [Deleting a GitHub Repository](#10-deleting-a-github-repository)
 11. [Recovery Path — Repo Has Wrong Content Baked Into History](#11-recovery-path--repo-has-wrong-content-baked-into-history)
 12. [Isolating One Project from a Shared Parent Folder](#12-isolating-one-project-from-a-shared-parent-folder)
+13. [Push Rejected — "fetch first"](#13-push-rejected--fetch-first)
 
 Every section below ends with a **⬆ Back to top** link.
 
@@ -221,6 +222,9 @@ No `-u origin main` needed again — upstream is already remembered.
 | Ask GitHub directly for its branch list | `git ls-remote --heads origin` |
 | Count how many branches are on GitHub | `git ls-remote --heads origin \| find /c "refs/heads/"` |
 | Refresh remote branch list (drop deleted ones) | `git fetch --prune` |
+| Download GitHub's commits without merging them | `git fetch origin` |
+| See commits GitHub has that you don't | `git log --oneline main..origin/main` |
+| Merge GitHub's commits into your local branch | `git pull --no-rebase origin main` |
 | Push and set tracking (first time) | `git push -u origin main` |
 | Push (after tracking is set) | `git push` |
 | View commit history | `git log --oneline` |
@@ -579,5 +583,98 @@ git rev-parse --show-toplevel
 ```
 
 If that last command prints the new folder's own path (not the parent's), the project is fully isolated — Unstage, Remove, and Ignore will never be needed for it again.
+
+[⬆ Back to top](#table-of-contents)
+
+---
+
+## 13. Push Rejected — "fetch first"
+
+**Symptom:** `git push` fails with:
+
+```
+ ! [rejected]        main -> main (fetch first)
+error: failed to push some refs to 'https://github.com/...'
+hint: Updates were rejected because the remote contains work that you do not
+hint: have locally.
+```
+
+**Cause:** the branch on GitHub has a commit your local repo doesn't have. It got there without you — a README added or a file edited on the github.com website, a branch or pull request merged in the browser, or a push from another machine. Git refuses the push because accepting it would erase that commit. This is a safety feature, not a problem with your project.
+
+**Why `git status` still said "up to date with 'origin/main'":** that line compares your branch to your *last-fetched snapshot* of GitHub, not to GitHub itself. The snapshot only refreshes when you run `git fetch` or `git pull` — the same staleness problem as `git branch -r` in [Section 7](#checking-how-many-branches-the-github-repo-has).
+
+**Check first — is this your problem?**
+
+```bash
+git ls-remote --heads origin
+git log --oneline -1 origin/main
+```
+
+The first shows the commit GitHub's `main` is *actually* on; the second shows the commit your local snapshot *thinks* it's on. If the two hashes differ, this is the cause.
+
+Real example from `paimana_1point1`: `ls-remote` showed `main` at `4523a37`, local `origin/main` was at `b080ba4`, and `4523a37` appeared nowhere in `git log` — a commit existed on GitHub that had never been downloaded.
+
+### Fix — download the missing commit, merge it into yours, then push
+
+The `#` lines are explanations for reading, not typing — CMD doesn't understand `#`, so only enter the command lines.
+
+```bash
+# 1. Download GitHub's latest commits WITHOUT touching any of your files.
+#    Refreshes your local snapshot of origin/main to match GitHub.
+git fetch origin
+
+# 2. Show what GitHub has that you don't.
+#    "main..origin/main" means "in origin/main but NOT in main".
+#    Expect one or more lines. If it prints nothing, skip to step 6.
+git log --oneline main..origin/main
+
+# 3. Optional — list the files that commit changed.
+#    Any file here that you ALSO changed locally = a conflict is coming in step 4.
+git show --stat origin/main
+
+# 4. Merge GitHub's commit into your local main.
+#    --no-rebase = keep both commits exactly as they are and add one "merge commit"
+#    that joins them (safest option, nothing rewritten).
+#    An editor may open with a pre-written message — just save and close it.
+git pull --no-rebase origin main
+
+# 5. Confirm it worked: top line is a "Merge branch 'main'..." commit, with
+#    your commit and GitHub's commit both underneath it.
+git log --oneline
+
+# 6. Push — succeeds now because your main contains everything GitHub's main has.
+git push
+```
+
+### If step 4 stops with `CONFLICT (content): Merge conflict in <file>`
+
+Git found competing edits to the same file and needs you to choose.
+
+```bash
+# Open the named file. Git has placed both versions between markers:
+#    <<<<<<< HEAD        ← your version starts here
+#    =======             ← divider
+#    >>>>>>> 4523a37     ← GitHub's version ends here
+# Delete the three marker lines, keep whichever lines you want, save the file.
+
+git add .                                           # tells Git "conflict resolved"
+git commit -m "Merge GitHub main into local main"   # completes the merge
+git push
+```
+
+**Never use `git push --force` to get past this error.** It would delete the GitHub commit from the branch — and you don't know what that commit was until step 2 shows you.
+
+**The one-line rule:** `push` is only allowed when your branch already contains every commit the remote has. `fetch` downloads the missing commit, `pull` adds it to your branch, and then `push` goes through.
+
+### Summary table
+
+| Step | Command | Purpose |
+|---|---|---|
+| 1 | `git ls-remote --heads origin` vs `git log --oneline -1 origin/main` | Confirm GitHub is ahead of your local snapshot |
+| 2 | `git fetch origin` | Download the missing commit(s) — your files are untouched |
+| 3 | `git log --oneline main..origin/main` | See exactly what GitHub has that you don't |
+| 4 | `git pull --no-rebase origin main` | Merge it into your local branch |
+| 5 | Resolve conflict → `git add .` → `git commit -m "..."` | Only if step 4 reported a conflict |
+| 6 | `git push` | Now succeeds |
 
 [⬆ Back to top](#table-of-contents)
