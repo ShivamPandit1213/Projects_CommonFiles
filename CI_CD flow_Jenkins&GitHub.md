@@ -24,6 +24,22 @@
 11. [Recovery Path — Repo Has Wrong Content Baked Into History](#11-recovery-path--repo-has-wrong-content-baked-into-history)
 12. [Isolating One Project from a Shared Parent Folder](#12-isolating-one-project-from-a-shared-parent-folder)
 13. [Push Rejected — "fetch first"](#13-push-rejected--fetch-first)
+   - [Conflict: same file on both sides with different content](#conflict-same-file-on-both-sides-with-different-content)
+14. [Merge Conflicts — Other Scenarios and How to Fix Each](#14-merge-conflicts--other-scenarios-and-how-to-fix-each)
+   - [Which state am I in?](#which-state-am-i-in)
+   - [Quick lookup — message to scenario](#quick-lookup--message-to-scenario)
+   - [1 — Both sides edited the same lines](#scenario-1--both-sides-edited-the-same-lines)
+   - [2 — Both sides created the same new file](#scenario-2--both-sides-created-the-same-new-file)
+   - [3 — Edited on one side, deleted on the other](#scenario-3--edited-on-one-side-deleted-on-the-other)
+   - [4 — Binary file](#scenario-4--binary-file-screenshot-excel-jar-pdf)
+   - [5 — Whole file conflicts (line endings)](#scenario-5--the-whole-file-conflicts-after-a-one-line-change-line-endings)
+   - [6 — Several files conflict at once](#scenario-6--several-files-conflict-at-once)
+   - [7 — Pull refused: local changes would be overwritten](#scenario-7--pull-refused-your-local-changes-would-be-overwritten-by-merge)
+   - [8 — Conflict during a rebase pull](#scenario-8--conflict-during-a-rebase-pull)
+   - [9 — Conflict when merging a branch locally](#scenario-9--conflict-when-merging-a-branch-locally)
+   - [10 — Conflict on a GitHub pull request](#scenario-10--conflict-on-a-github-pull-request)
+   - [11 — Conflict markers got committed by mistake](#scenario-11--conflict-markers-got-committed-by-mistake)
+   - [Backing out — abort](#backing-out--abort-and-return-to-before-the-pull)
 
 Every section below ends with a **⬆ Back to top** link.
 
@@ -225,6 +241,16 @@ No `-u origin main` needed again — upstream is already remembered.
 | Download GitHub's commits without merging them | `git fetch origin` |
 | See commits GitHub has that you don't | `git log --oneline main..origin/main` |
 | Merge GitHub's commits into your local branch | `git pull --no-rebase origin main` |
+| Conflict — use local file, remove GitHub's | `git checkout --ours <file>` |
+| Conflict — remove local file, use GitHub's | `git checkout --theirs <file>` |
+| Pull an old version of a file out of history | `git show <commit-hash>:<file> > <new-file-name>` |
+| Conflict — delete the file instead of keeping it | `git rm <file>` |
+| List files still conflicted | `git diff --name-only --diff-filter=U` |
+| Find leftover conflict markers in tracked files | `git grep -n "<<<<<<<"` |
+| Give up on a merge/pull, restore pre-pull state | `git merge --abort` |
+| Give up on a rebase | `git rebase --abort` |
+| Continue a rebase after fixing a conflict | `git rebase --continue` |
+| Park uncommitted edits / bring them back | `git stash` / `git stash pop` |
 | Push and set tracking (first time) | `git push -u origin main` |
 | Push (after tracking is set) | `git push` |
 | View commit history | `git log --oneline` |
@@ -636,6 +662,7 @@ git show --stat origin/main
 #    --no-rebase = keep both commits exactly as they are and add one "merge commit"
 #    that joins them (safest option, nothing rewritten).
 #    An editor may open with a pre-written message — just save and close it.
+#    If it stops with CONFLICT instead, jump to the conflict section below.
 git pull --no-rebase origin main
 
 # 5. Confirm it worked: top line is a "Merge branch 'main'..." commit, with
@@ -646,21 +673,73 @@ git log --oneline
 git push
 ```
 
-### If step 4 stops with `CONFLICT (content): Merge conflict in <file>`
+### Conflict: same file on both sides with different content
 
-Git found competing edits to the same file and needs you to choose.
+Git found two different versions of one file and can't choose for you. The message tells you which kind:
+
+| Message | Meaning |
+|---|---|
+| `CONFLICT (content): Merge conflict in <file>` | The file already existed; you and GitHub both edited the same lines |
+| `CONFLICT (add/add): Merge conflict in <file>` | The file is **new on both sides** — you created it locally, and a file with the same name was created on GitHub with different content (e.g. a `README.md` written on the website while you also added one locally) |
+
+Nothing is broken — the merge is **paused**, waiting for you. `git status` says "You have unmerged paths" and lists the file as `both modified` or `both added`. Until you resolve it and commit, `git log` shows no merge commit and `git push` keeps failing.
+
+**Naming trap:** during a merge, **ours** = your local branch (`HEAD`), **theirs** = the commit coming in from GitHub.
+
+Pick **one** of the three:
+
+| Want | Command |
+|---|---|
+| **Use the local file, remove GitHub's** | `git checkout --ours <file>` |
+| **Remove the local file, use GitHub's** | `git checkout --theirs <file>` |
+| Keep both / mix them by hand | Open the file in VS Code or Notepad and edit it — see C below |
 
 ```bash
-# Open the named file. Git has placed both versions between markers:
+# A. Keep YOUR local version, discard GitHub's
+git checkout --ours README.md
+
+# B. Keep GITHUB's version, discard your local one
+git checkout --theirs README.md
+
+# C. Keep both: the file currently holds both versions between marker lines:
 #    <<<<<<< HEAD        ← your version starts here
 #    =======             ← divider
-#    >>>>>>> 4523a37     ← GitHub's version ends here
-# Delete the three marker lines, keep whichever lines you want, save the file.
+#    >>>>>>> 4523a37     ← GitHub's version ends here (hash = GitHub's commit)
+#    Delete ONLY the three marker lines, reorder the content if you like, save.
+#    VS Code shows "Accept Current / Incoming / Both Changes" buttons instead —
+#    Current = your local version, Incoming = GitHub's.
+```
 
-git add .                                           # tells Git "conflict resolved"
-git commit -m "Merge GitHub main into local main"   # completes the merge
+Run A **or** B, never both — each one overwrites the file with a single version, and whichever you ran **last** wins. `Updated 1 path from the index` is the confirmation. Check what you're holding before moving on:
+
+```bash
+type README.md
+```
+
+Then finish the merge — same in all three cases:
+
+```bash
+git add README.md                                   # marks the conflict resolved — after this, --ours/--theirs no longer work for this file
+git status                                          # should say "All conflicts fixed but you are still merging"
+git commit -m "Merge GitHub main into local main"   # creates the merge commit
+git log --oneline                                   # merge commit on top, your commit and GitHub's both below it
 git push
 ```
+
+**Getting the dropped version back later:** whichever version you discarded is still in history under its commit. Pull it out into a separate file:
+
+```bash
+git show <commit-hash>:<file> > <new-file-name>
+git add <new-file-name>
+git commit -m "Keep other version of <file> as <new-file-name>"
+git push
+```
+
+To find the hash, run `git log --oneline`: GitHub's version is the top commit that step 2 listed; your version is your own commit sitting directly under the merge commit.
+
+Real example from `paimana_1point1`: `--ours` kept the local `README.md`, so GitHub's Git-guide README was dropped — but it still lived in commit `4523a37`, recoverable with `git show 4523a37:README.md > GIT_GUIDE.md`.
+
+Other kinds of conflict — a file deleted on one side, binary files, line endings, several files at once, rebase, branch merges, GitHub pull requests — are in [Section 14](#14-merge-conflicts--other-scenarios-and-how-to-fix-each).
 
 **Never use `git push --force` to get past this error.** It would delete the GitHub commit from the branch — and you don't know what that commit was until step 2 shows you.
 
@@ -674,7 +753,321 @@ git push
 | 2 | `git fetch origin` | Download the missing commit(s) — your files are untouched |
 | 3 | `git log --oneline main..origin/main` | See exactly what GitHub has that you don't |
 | 4 | `git pull --no-rebase origin main` | Merge it into your local branch |
-| 5 | Resolve conflict → `git add .` → `git commit -m "..."` | Only if step 4 reported a conflict |
+| 5 | `git checkout --ours <file>` (keep local) **or** `git checkout --theirs <file>` (keep GitHub's) **or** edit by hand → `git add <file>` → `git commit -m "..."` | Only if step 4 reported a conflict |
 | 6 | `git push` | Now succeeds |
+
+[⬆ Back to top](#table-of-contents)
+
+---
+
+## 14. Merge Conflicts — Other Scenarios and How to Fix Each
+
+[Section 13](#conflict-same-file-on-both-sides-with-different-content) covers the case already hit once — the same file changed on both sides. This section is the full list: every other way a conflict shows up during `pull` / `merge` / `rebase`, what the message means, and the exact commands to get out of it.
+
+**The pattern is the same in every scenario:**
+
+| Step | What to do | Command |
+|---|---|---|
+| 1 | Fix each conflicted file — edit by hand, or pick a side | hand-edit · `git checkout --ours <file>` · `git checkout --theirs <file>` · `git rm <file>` |
+| 2 | Tell Git that file is done | `git add <file>` (or `git rm <file>` if the answer is "delete it") |
+| 3 | Finish the operation you were in the middle of | merge or pull → `git commit` · rebase → `git rebase --continue` · stash pop → `git stash drop` |
+| 4 | Push | `git push` |
+| Escape hatch | Give up and put everything back exactly as it was | `git merge --abort` or `git rebase --abort` |
+
+As in Section 13, the `#` lines in code blocks are notes for reading, not typing.
+
+### Which state am I in?
+
+Run `git status` — its first lines say exactly what Git is waiting for:
+
+| `git status` says | Meaning | Finish with |
+|---|---|---|
+| `Unmerged paths:` then `both modified` / `both added` / `deleted by us` / `deleted by them` | A conflict still needs resolving | Fix the file, then `git add <file>` (or `git rm <file>`) |
+| `All conflicts fixed but you are still merging.` | Every file is resolved; the merge just needs its commit | `git commit -m "..."` |
+| `You are currently rebasing` / `interactive rebase in progress` | The conflict happened during a rebase | `git add <file>` → `git rebase --continue` |
+| `Your branch is ahead of 'origin/main' by N commits.` | Done locally, not pushed yet | `git push` |
+
+### Quick lookup — message to scenario
+
+| What you see | Go to |
+|---|---|
+| `CONFLICT (content): Merge conflict in <file>` | [Scenario 1](#scenario-1--both-sides-edited-the-same-lines) |
+| `CONFLICT (add/add): Merge conflict in <file>` | [Scenario 2](#scenario-2--both-sides-created-the-same-new-file) |
+| `CONFLICT (modify/delete): <file> deleted in ... and modified in ...` | [Scenario 3](#scenario-3--edited-on-one-side-deleted-on-the-other) |
+| `warning: Cannot merge binary files: <file>` | [Scenario 4](#scenario-4--binary-file-screenshot-excel-jar-pdf) |
+| Markers wrap the **entire** file though you changed one line | [Scenario 5](#scenario-5--the-whole-file-conflicts-after-a-one-line-change-line-endings) |
+| Several `CONFLICT` lines from one pull | [Scenario 6](#scenario-6--several-files-conflict-at-once) |
+| `error: Your local changes to the following files would be overwritten by merge` | [Scenario 7](#scenario-7--pull-refused-your-local-changes-would-be-overwritten-by-merge) |
+| `error: could not apply <hash>...` and a `git rebase --continue` hint | [Scenario 8](#scenario-8--conflict-during-a-rebase-pull) |
+| Conflict after `git merge <branch>` | [Scenario 9](#scenario-9--conflict-when-merging-a-branch-locally) |
+| GitHub: "This branch has conflicts that must be resolved" | [Scenario 10](#scenario-10--conflict-on-a-github-pull-request) |
+| `<<<<<<< HEAD` lines showing up on GitHub or breaking the build | [Scenario 11](#scenario-11--conflict-markers-got-committed-by-mistake) |
+| Don't want to deal with it right now | [Backing out](#backing-out--abort-and-return-to-before-the-pull) |
+
+### Scenario 1 — Both sides edited the same lines
+
+```
+CONFLICT (content): Merge conflict in src/main/resources/config.properties
+```
+
+**Cause:** the file already existed, and the same lines were changed locally and on GitHub in different ways.
+
+```bash
+# Option A — hand-merge: open the file, delete the <<<<<<< / ======= / >>>>>>> marker lines,
+#            keep the lines you want from each side, save.
+# Option B — take one side whole (run ONE of these, not both — the last one wins):
+git checkout --ours <file>       # keep local, drop GitHub's
+git checkout --theirs <file>     # keep GitHub's, drop local
+
+git add <file>
+git commit -m "Merge GitHub main into local main"
+git push
+```
+
+Full detail, including the `ours` / `theirs` naming trap and how to get the dropped version back: [Section 13](#conflict-same-file-on-both-sides-with-different-content).
+
+### Scenario 2 — Both sides created the same new file
+
+```
+CONFLICT (add/add): Merge conflict in README.md
+```
+
+**Cause:** you created a file locally, and a file with the same name was created on GitHub (typically on the website) with different content. Git has no common starting point to merge from, so it usually flags the whole file.
+
+Resolution is identical to Scenario 1 — pick a side with `--ours` / `--theirs`, or hand-merge. The worked example with real output is in [Section 13](#conflict-same-file-on-both-sides-with-different-content).
+
+### Scenario 3 — Edited on one side, deleted on the other
+
+```
+CONFLICT (modify/delete): suites/env-check.xml deleted in HEAD and modified in 4523a37.
+Version 4523a37 of suites/env-check.xml left in tree.
+```
+
+**Cause:** one side deleted the file, the other changed it. `deleted in HEAD` = you deleted it locally and GitHub edited it; `deleted in 4523a37` = the reverse. Git leaves the edited version in your folder and asks which you meant. There are no markers to edit — the choice is keep or delete.
+
+```bash
+# Keep the file (the edited version is already sitting in your folder):
+git add <file>
+
+# — or — delete it for good:
+git rm <file>
+
+git commit -m "Merge GitHub main into local main"
+git push
+```
+
+`git status` shows this one as `deleted by us` or `deleted by them` under Unmerged paths.
+
+### Scenario 4 — Binary file (screenshot, Excel, jar, PDF)
+
+```
+warning: Cannot merge binary files: screenshots/login.png (HEAD vs. 4523a37)
+CONFLICT (content): Merge conflict in screenshots/login.png
+```
+
+**Cause:** both sides changed a file that isn't text, so Git can't put markers inside it — there is nothing to hand-merge. Common in test projects: screenshots, `.xlsx` test data, `.jar`, `.pdf`.
+
+```bash
+git checkout --ours <file>       # keep your version
+git checkout --theirs <file>     # keep GitHub's version        (one or the other)
+
+git add <file>
+git commit -m "Merge GitHub main into local main"
+git push
+```
+
+If you need both, keep one under the original name and pull the other out of history under a new name: `git show <commit-hash>:<file> > <new-file-name>`, then `git add` / `git commit` / `git push` it.
+
+### Scenario 5 — The whole file conflicts after a one-line change (line endings)
+
+**Symptom:** you changed one or two lines, but the conflict markers wrap the **entire** file — every line looks different. `git diff` shows `^M` at the ends of lines. Usually preceded by warnings like `CRLF will be replaced by LF the next time Git touches it`.
+
+**Cause:** one side saved the file with Windows line endings (CRLF), the other with Unix (LF), so Git sees every line as changed. The content is the same — only the invisible end-of-line characters differ.
+
+```bash
+# 1. Back out of the half-done merge — nothing is lost
+git merge --abort
+
+# 2. Redo the pull, telling Git to ignore end-of-line differences while merging
+git pull --no-rebase -X ignore-space-at-eol origin main
+
+# 3a. If it completes cleanly (an editor may open — save and close), you're done:
+git push
+
+# 3b. If a CONFLICT remains, it's now only the lines you really changed — fix as in Scenario 1:
+git add <file>
+git commit -m "Merge GitHub main into local main"
+git push
+```
+
+**Prevent it:** make sure the project's `.gitattributes` contains the line `* text=auto`. Git then stores every text file with LF and hands you CRLF on Windows, so both sides always agree.
+
+### Scenario 6 — Several files conflict at once
+
+```
+CONFLICT (content): Merge conflict in pom.xml
+CONFLICT (content): Merge conflict in Jenkinsfile
+CONFLICT (add/add): Merge conflict in README.md
+Automatic merge failed; fix conflicts and then commit the result.
+```
+
+**Cause:** nothing special — one pull, several files touched on both sides. Each file is resolved on its own (whichever scenario above applies to it); the merge is finished **once**, after all of them.
+
+```bash
+# List every file still waiting — repeat until it prints nothing
+git diff --name-only --diff-filter=U
+
+# For each file: fix it (hand-edit / --ours / --theirs / git rm), then mark it done
+git add <file>
+
+# When the list is empty:
+git status                                          # should say "All conflicts fixed but you are still merging"
+git commit -m "Merge GitHub main into local main"
+git push
+```
+
+`git add .` at the end marks everything at once — fine, but only after you have actually looked at every file. A file still containing `<<<<<<<` markers gets committed as-is, markers and all (that's Scenario 11).
+
+### Scenario 7 — Pull refused: "Your local changes would be overwritten by merge"
+
+```
+error: Your local changes to the following files would be overwritten by merge:
+        src/main/resources/config.properties
+Please commit your changes or stash them before you merge.
+Aborting
+```
+
+**Cause:** not a conflict yet. Git stopped *before* merging because you have uncommitted edits in a file the incoming commit also changes, and merging would destroy them. Nothing has been touched.
+
+```bash
+# Option A (usual) — commit your work first, then pull
+git add .
+git commit -m "what changed"
+git pull --no-rebase origin main
+
+# Option B — not ready to commit? Park the edits, pull, bring them back
+git stash                                   # sets your uncommitted edits aside; folder returns to the last commit
+git pull --no-rebase origin main
+git stash pop                               # re-applies your edits on top of the new code
+```
+
+If `git stash pop` itself reports `CONFLICT`, fix the file as in Scenario 1, `git add <file>`, then finish with `git stash drop` (not `git commit` — nothing is being merged), and carry on with the usual add / commit / push.
+
+### Scenario 8 — Conflict during a rebase pull
+
+If you ever use `git pull --rebase` instead of `--no-rebase`, a conflict looks like this:
+
+```
+CONFLICT (content): Merge conflict in Jenkinsfile
+error: could not apply e2c1786... Update suite's testng file
+hint: Resolve all conflicts manually, mark them as resolved with
+hint: "git add/rm <conflicted_files>", then run "git rebase --continue".
+```
+
+**Cause:** a rebase replays your commits one at a time on top of GitHub's and stops at the first one that clashes. Two things differ from a merge:
+
+1. **`--ours` and `--theirs` are swapped.** During a rebase Git stands on GitHub's commit and applies yours on top, so `--ours` = **GitHub's** version and `--theirs` = **your** version — the reverse of Section 13. Hand-merging avoids the trap: the `<<<<<<< HEAD` side is GitHub's, the `>>>>>>>` side is yours.
+2. **Finish with `git rebase --continue`, not `git commit`.**
+
+```bash
+# fix the file: hand-edit, or  --ours = GitHub's / --theirs = yours
+git add <file>
+git rebase --continue          # an editor may open to confirm the commit message — save and close
+                               # if it stops again on the next commit, repeat
+git push
+```
+
+To back out: `git rebase --abort` — your branch returns to exactly how it was before the pull.
+
+### Scenario 9 — Conflict when merging a branch locally
+
+Merging a branch (`git checkout main` → `git merge QA_Testing`) can conflict exactly like a pull:
+
+```
+Auto-merging suites/smoke.xml
+CONFLICT (content): Merge conflict in suites/smoke.xml
+Automatic merge failed; fix conflicts and then commit the result.
+```
+
+**Cause:** same mechanics — a pull *is* a fetch followed by a merge. Here **ours** = the branch you are standing on (`main`), **theirs** = the branch being merged in (`QA_Testing`).
+
+```bash
+# fix each file: hand-edit, or
+git checkout --ours <file>       # keep main's version
+git checkout --theirs <file>     # keep QA_Testing's version
+
+git add <file>
+git commit -m "Merge QA_Testing into main"
+git push
+```
+
+Back out with `git merge --abort`.
+
+### Scenario 10 — Conflict on a GitHub pull request
+
+**Symptom:** on github.com the pull request shows **"This branch has conflicts that must be resolved"** and the Merge button is disabled.
+
+**Cause:** `main` moved on after the branch was created — `QA_Testing` was branched, then `main` received new commits — and both touched the same lines. GitHub won't merge until someone chooses.
+
+**Option A — in the browser (simple text conflicts):** click **Resolve conflicts** → GitHub opens the file with the same `<<<<<<<` / `=======` / `>>>>>>>` markers → edit, delete the markers → **Mark as resolved** → **Commit merge**. The PR becomes mergeable. GitHub refuses this route for binary files or large conflicts — use Option B.
+
+**Option B — locally (any conflict, including binary):** bring `main` into the branch, fix it there, push the branch — the PR updates itself.
+
+```bash
+git fetch origin
+git checkout QA_Testing
+git pull --no-rebase origin main        # merges main INTO the branch — conflicts show up here
+# fix each file (ours = QA_Testing, theirs = main), then:
+git add <file>
+git commit -m "Merge main into QA_Testing"
+git push                                # PR now shows "This branch has no conflicts with the base branch"
+```
+
+### Scenario 11 — Conflict markers got committed by mistake
+
+**Symptom:** a file on GitHub shows `<<<<<<< HEAD` / `=======` / `>>>>>>>` lines, or the build fails with a strange parse error (Maven on `pom.xml`, Jenkins on `Jenkinsfile`, TestNG on a suite XML).
+
+**Cause:** `git add .` was run while a file still contained markers, so the half-resolved file was committed and pushed as-is.
+
+```bash
+# Find every tracked file that still contains markers
+git grep -n "<<<<<<<"
+
+# Open each one, delete the marker lines, keep the correct content, save. Then:
+git add <file>
+git commit -m "Remove leftover conflict markers"
+git push
+```
+
+### Backing out — abort and return to before the pull
+
+Any time a conflict is more than you want to deal with right now:
+
+```bash
+git status              # tells you whether you're mid-merge or mid-rebase
+git merge --abort       # if it said "you are still merging" or listed Unmerged paths after a pull / merge
+git rebase --abort      # if it said "You are currently rebasing"
+```
+
+Both put every file back exactly as it was before the pull — your commits, your files, nothing lost. GitHub's commits stay downloaded (the fetch already happened), so `git log --oneline main..origin/main` still shows what's waiting. Run the pull again whenever you're ready.
+
+**Never** try to escape a conflict with `git push --force` (it deletes GitHub's commits) or by deleting the `.git` folder.
+
+### Conflict summary table
+
+| # | Scenario | Fix | Finish |
+|---|---|---|---|
+| 1 | Both edited the same lines | hand-edit, or `git checkout --ours <file>` / `--theirs <file>` → `git add <file>` | `git commit` → `git push` |
+| 2 | Both created the same new file | same as 1 | `git commit` → `git push` |
+| 3 | Edited on one side, deleted on the other | keep: `git add <file>` — delete: `git rm <file>` | `git commit` → `git push` |
+| 4 | Binary file | `git checkout --ours <file>` / `--theirs <file>` → `git add <file>` | `git commit` → `git push` |
+| 5 | Whole file conflicts (line endings) | `git merge --abort` → `git pull --no-rebase -X ignore-space-at-eol origin main` | `git push` |
+| 6 | Several files at once | `git diff --name-only --diff-filter=U` → fix + `git add` each | one `git commit` → `git push` |
+| 7 | Pull refused (uncommitted edits) | `git add .` → `git commit` → pull again, or `git stash` → pull → `git stash pop` | usual `git push` |
+| 8 | Conflict during a rebase | fix (`--ours` = GitHub's, `--theirs` = yours — swapped) → `git add <file>` | `git rebase --continue` → `git push` |
+| 9 | Merging a branch locally | fix (`--ours` = current branch, `--theirs` = incoming branch) → `git add <file>` | `git commit` → `git push` |
+| 10 | GitHub pull request | **Resolve conflicts** button, or merge `main` into the branch locally and push | PR becomes mergeable |
+| 11 | Markers committed by mistake | `git grep -n "<<<<<<<"` → clean each file → `git add <file>` | `git commit` → `git push` |
+| — | Give up for now | `git merge --abort` or `git rebase --abort` | nothing lost; pull again later |
 
 [⬆ Back to top](#table-of-contents)
