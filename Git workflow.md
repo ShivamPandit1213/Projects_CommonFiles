@@ -20,6 +20,7 @@ Each workflow below follows the same four steps — **Verify → Read → Act �
 - [Workflow 5 — Undoing a commit](#workflow-5--undoing-a-commit)
 - [Workflow 6 — Recovering lost work](#workflow-6--recovering-lost-work)
 - [Workflow 7 — Isolating a project from a shared parent](#workflow-7--isolating-a-project-from-a-shared-parent)
+- [Workflow 8 — Files show as deleted but not staged](#workflow-8--files-show-as-deleted-but-not-staged)
 - [Commands that need a check first](#commands-that-need-a-check-first)
 
 ---
@@ -451,6 +452,74 @@ git rev-parse --show-toplevel
 
 ---
 
+## Workflow 8 — Files show as deleted but not staged
+
+```text
+Changes not staged for commit:
+        deleted:    Coal.txt
+        deleted:    Payload.json
+```
+
+The files are tracked by Git, gone from disk, and the deletion has not been committed.
+Git is reporting a fact, not a problem — the decision is whether the deletion was
+intentional.
+
+### Verify
+
+```bash
+git status                        # which files, and are they staged or unstaged
+git log --oneline -- <file>       # when it last changed, and why
+git show HEAD:<file> | head -20   # what it contained, straight from the last commit
+```
+
+The third command is the one people skip. A tracked file still exists in history even
+after it leaves the disk, so you can always read it before deciding.
+
+### Read
+
+| Situation | Act |
+|---|---|
+| Deletion was intentional | Stage and commit it |
+| Deleted by accident | Restore from the last commit |
+| Unsure what it held | Read it first with `git show HEAD:<file>` |
+
+### Act
+
+Commit the deletion:
+
+```bash
+git rm <file-1> <file-2>
+git status                        # confirm only these two are staged
+git commit -m "Remove <file-1> and <file-2>"
+git push
+```
+
+Or restore the files:
+
+```bash
+git restore <file-1> <file-2>
+```
+
+`git restore` works here precisely because the files are still tracked — Git pulls them
+back from the last commit.
+
+### Confirm
+
+```bash
+git status                        # clean, or exactly the deletion you intended
+git ls-files | findstr <name>     # Windows; use grep on macOS/Linux
+```
+
+> **Deleting a file does not remove its contents from the repository.** Every previous
+> version stays in history and remains readable by anyone with access. If the file held
+> credentials, a token, or anything else that should not have been committed, deleting
+> it is not the fix — the secret must be rotated, and removing it from history needs
+> `git filter-repo` plus a force-push.
+
+[⬆ Back to top](#contents)
+
+---
+
 ## Commands that need a check first
 
 | Command | Destroys | Check before |
@@ -461,6 +530,7 @@ git rev-parse --show-toplevel
 | `git push --force-with-lease` | Remote commits | `git log HEAD..origin/main` |
 | `git rm -r --cached` | Tracking (files survive) | `git ls-files <path>` |
 | `git branch -D` | An unmerged branch | `git log --oneline <branch>` |
+| `git rm <file>` | The file, and stages the deletion | `git show HEAD:<file>` |
 
 Two that look dangerous and are not: `git fetch` changes no files, and `git stash`
 is fully reversible with `git stash pop`.
