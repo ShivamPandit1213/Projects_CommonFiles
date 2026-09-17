@@ -21,6 +21,7 @@ Each workflow below follows the same four steps — **Verify → Read → Act �
 - [Workflow 6 — Recovering lost work](#workflow-6--recovering-lost-work)
 - [Workflow 7 — Isolating a project from a shared parent](#workflow-7--isolating-a-project-from-a-shared-parent)
 - [Workflow 8 — Files show as deleted but not staged](#workflow-8--files-show-as-deleted-but-not-staged)
+- [Workflow 9 — Switching branches](#workflow-9--switching-branches)
 - [Commands that need a check first](#commands-that-need-a-check-first)
 
 ---
@@ -520,6 +521,93 @@ git ls-files | findstr <name>     # Windows; use grep on macOS/Linux
 
 ---
 
+## Workflow 9 — Switching branches
+
+Two things bite on a branch switch: files held open by an IDE, and `.gitignore` rules
+that differ between branches. The second is the dangerous one, because it is silent.
+
+### Verify
+
+```bash
+git status                        # a switch carries uncommitted work with you
+git branch -a                     # which branches exist locally and on the remote
+git fetch origin                  # refresh the remote snapshot first
+```
+
+Commit or stash anything pending before switching, and decide which branch it belongs
+on. Uncommitted work follows you across the switch and lands wherever you commit it.
+
+### Act
+
+```bash
+git switch <branch>               # branch already exists locally
+git switch -c <branch> origin/<branch>   # first time: create it from the remote
+git status                        # confirm the branch and its tracking
+```
+
+> **Close your IDE first on Windows.** A loaded project holds directory handles open,
+> and Git prompts `Deletion of directory '...' failed. Should I try again? (y/n)` for
+> each one. Answering `n` completes the switch but leaves empty folders behind, which
+> can confuse the build path. The switch itself still succeeds.
+
+### The check people skip — `.gitignore` differs per branch
+
+`.gitignore` is a tracked file, so each branch carries its own version. A file protected
+on `main` can be completely unprotected on a feature branch created before the rule was
+added.
+
+```bash
+type .gitignore                   # Windows; use cat on macOS/Linux
+git status                        # anything newly untracked is unprotected here
+```
+
+Any file that appears under "Untracked files" after a switch — and did not appear before
+— is a file this branch does not ignore. If one of them holds credentials, a `git add .`
+here will commit them.
+
+### Act — align the ignore rules
+
+Append the missing entries:
+
+```bash
+echo test-output/>>.gitignore     # no space before >> in CMD, or you get a stray char
+type .gitignore                   # confirm each line landed on its own row
+git status                        # the files should disappear from the listing
+```
+
+Or take the maintained version from the other branch wholesale, which also prevents the
+two drifting further apart:
+
+```bash
+git checkout origin/main -- .gitignore .gitattributes   # take both files from main
+git status                        # the untracked entries should vanish
+git diff --cached                 # read exactly what you are about to commit
+```
+
+### Bring the branch up to date
+
+A branch that is *behind* is building on stale code:
+
+```bash
+git log --oneline <branch>..origin/main   # what main has that this branch does not
+git merge origin/main             # fast-forward if the branch is 0 ahead
+git log --oneline -5              # confirm main's commits are now present
+```
+
+### Confirm
+
+```bash
+git status                        # "up to date with 'origin/<branch>'"
+git log --oneline -3              # your commit on top
+```
+
+Then refresh the repository's Branches page. The branch should read 0 behind and however
+many commits ahead you pushed.
+
+[⬆ Back to top](#contents)
+
+---
+
 ## Commands that need a check first
 
 | Command | Destroys | Check before |
@@ -531,6 +619,7 @@ git ls-files | findstr <name>     # Windows; use grep on macOS/Linux
 | `git rm -r --cached` | Tracking (files survive) | `git ls-files <path>` |
 | `git branch -D` | An unmerged branch | `git log --oneline <branch>` |
 | `git rm <file>` | The file, and stages the deletion | `git show HEAD:<file>` |
+| `git switch <branch>` | Nothing, but changes which `.gitignore` applies | `type .gitignore` after switching |
 
 Two that look dangerous and are not: `git fetch` changes no files, and `git stash`
 is fully reversible with `git stash pop`.
