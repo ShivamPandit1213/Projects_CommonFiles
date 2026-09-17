@@ -73,8 +73,8 @@ a parent repository, so commits sweep in unrelated projects.
 ### Verify
 
 ```bash
-cd <project-folder>
-git rev-parse --show-toplevel
+cd <project-folder>               # enter the exact project folder, never a parent
+git rev-parse --show-toplevel     # prints the repo root Git is actually using
 ```
 
 ### Read
@@ -88,14 +88,14 @@ git rev-parse --show-toplevel
 ### Act
 
 ```bash
-git init
+git init                          # creates a new, separate .git in this folder
 git rev-parse --show-toplevel     # must now print THIS folder
-git add .
+git add .                         # stages everything, including files you may not expect
 git status                        # no path may start with ../
-git commit -m "Initial commit"
-git remote add origin <url>
-git branch -M main
-git push -u origin main
+git commit -m "Initial commit"    # first commit, local only
+git remote add origin <url>       # link the local repo to the empty GitHub repo
+git branch -M main                # rename the current branch to main
+git push -u origin main           # upload and set upstream tracking
 ```
 
 ### Confirm
@@ -117,8 +117,8 @@ Then refresh the repository page in the browser. The file list should match the 
 ### Verify
 
 ```bash
-git status
-git diff
+git status                        # staged, unstaged, untracked, and branch tracking
+git diff                          # line-level changes not yet staged
 ```
 
 `git diff` shows unstaged line changes. Reading it before staging is the cheapest code
@@ -129,15 +129,15 @@ review available.
 ```bash
 git add <specific-file>           # prefer over "git add ." when the tree is noisy
 git status                        # confirm only what you intended is staged
-git commit -m "what changed"
-git push
+git commit -m "what changed"      # one commit, one change
+git push                          # upstream is already set, so no arguments needed
 ```
 
 ### Confirm
 
 ```bash
-git log --oneline -1
-git status
+git log --oneline -1              # confirm the commit landed
+git status                        # staged, unstaged, untracked, and branch tracking
 ```
 
 > If the commit message needs the word "and", it is probably two commits.
@@ -157,7 +157,7 @@ The remote has commits you do not. Nothing is wrong yet.
 ### Verify
 
 ```bash
-git fetch origin
+git fetch origin                  # refresh the remote snapshot, touching no files
 git log --oneline HEAD..origin/main     # theirs, missing from yours
 git log --oneline origin/main..HEAD     # yours, missing from theirs
 ```
@@ -187,9 +187,9 @@ others may already have your commits.
 ### Confirm
 
 ```bash
-git log --oneline -5
-git status
-git push
+git log --oneline -5              # recent history, one line each
+git status                        # staged, unstaged, untracked, and branch tracking
+git push                          # upstream is already set, so no arguments needed
 ```
 
 > **Never** resolve a rejected push with `--force-with-lease`. It deletes the remote
@@ -210,7 +210,7 @@ Automatic merge failed; fix conflicts and then commit the result.
 
 ```bash
 git status                        # lists every conflicted path
-git diff --name-only --diff-filter=U
+git diff --name-only --diff-filter=U# list only the unmerged (conflicted) paths
 ```
 
 ### Read
@@ -240,7 +240,7 @@ Three routes, by situation:
 Then mark resolved and continue:
 
 ```bash
-git add <file>
+git add <file>                    # mark this conflict as resolved
 git status                        # repeat until no conflicts remain
 git commit                        # or: git rebase --continue
 ```
@@ -248,7 +248,7 @@ git commit                        # or: git rebase --continue
 ### Confirm
 
 ```bash
-grep -rn "<<<<<<<" --include="*" . | grep -v ".git/"
+grep -rn "<<<<<<<" --include="*" . | grep -v ".git/"# nothing should print
 ```
 
 Nothing should print. Committed conflict markers are a common and embarrassing failure.
@@ -270,7 +270,7 @@ Returns you to exactly where you were. Nothing is lost.
 ### Verify
 
 ```bash
-git log --oneline -5
+git log --oneline -5              # recent history, one line each
 git log --oneline origin/main..HEAD     # has it been pushed?
 ```
 
@@ -288,23 +288,23 @@ That second command decides the whole approach.
 
 ```bash
 # keep changes staged
-git reset --soft HEAD~1
+git reset --soft HEAD~1           # undo the commit, keep changes staged
 
 # keep changes in the working tree, unstaged
-git reset HEAD~1
+git reset HEAD~1                  # undo the commit, keep changes in the working tree
 
 # discard the commit and its changes entirely
-git reset --hard HEAD~1
+git reset --hard HEAD~1           # undo the commit and discard its changes
 
 # safest on a shared branch: a new commit that undoes the old one
-git revert HEAD
+git revert HEAD                   # new commit that undoes the last one, history intact
 ```
 
 ### Confirm
 
 ```bash
-git log --oneline -3
-git status
+git log --oneline -3              # last three commits
+git status                        # staged, unstaged, untracked, and branch tracking
 ```
 
 > `--hard` discards **uncommitted** work permanently. Committed work survives in the
@@ -319,7 +319,7 @@ git status
 ### Verify
 
 ```bash
-git reflog
+git reflog                        # every movement of HEAD, newest first
 ```
 
 Every movement of `HEAD` is listed, newest first:
@@ -335,13 +335,13 @@ f09dd0b HEAD@{2}: commit: update mvn version details
 Find the entry from *before* the mistake. Inspect it before committing to it:
 
 ```bash
-git show 31e88d2
+git show 31e88d2                  # read that commit before acting on it
 ```
 
 ### Act
 
 ```bash
-git reset --hard 31e88d2
+git reset --hard 31e88d2          # move the branch back to that commit
 ```
 
 To look around without moving your branch:
@@ -353,8 +353,8 @@ git checkout 31e88d2      # detached HEAD; git switch - returns you
 ### Confirm
 
 ```bash
-git log --oneline -3
-git status
+git log --oneline -3              # last three commits
+git status                        # staged, unstaged, untracked, and branch tracking
 ```
 
 **Caveats.** The reflog is local and per-clone — it does not exist in a fresh clone, and
@@ -374,7 +374,7 @@ appear with a `../` prefix.
 ### Verify
 
 ```bash
-cd <project-folder>
+cd <project-folder>               # enter the exact project folder, never a parent
 git rev-parse --show-toplevel     # prints a PARENT path -> this is the problem
 dir /a:h .git                     # File Not Found -> no repo of its own
 ```
@@ -384,53 +384,53 @@ dir /a:h .git                     # File Not Found -> no repo of its own
 Three different fixes, each solving a different part. All three are needed.
 
 ```bash
-cd <parent-folder>
+cd <parent-folder>                # move up to the repo that is wrongly tracking everything
 
 # 1. Unstage — removes from the pending commit, still tracked
-git restore --staged <folder>
+git restore --staged <folder>     # unstage it, modifications preserved
 
 # 2. Untrack — stops Git watching it, files stay on disk
-git rm -r --cached <folder>
+git rm -r --cached <folder>       # stop tracking it, files stay on disk
 
 # 3. Ignore — stops it ever resurfacing
 #    add each folder to .gitignore
 ```
 
 ```gitignore
-other-project-1/
-other-project-2/
-target/
-test-output/
+other-project-1/                  # one line per folder to ignore
+other-project-2/                   # add every folder except the one you keep
+target/                           # build output
+test-output/                      # TestNG reports
 ```
 
 ```bash
 git remote -v                     # should print nothing
 git remote remove origin          # if it doesn't
-git add .gitignore
-git commit -m "Ignore unrelated project folders"
+git add .gitignore                # stage only the ignore rules
+git commit -m "Ignore unrelated project folders"# record the cleanup
 git status                        # only .gitignore and your project remain
 ```
 
 ### Act — part 2, give the project its own repo
 
 ```bash
-cd <project-folder>
-git init
+cd <project-folder>               # enter the exact project folder, never a parent
+git init                          # creates a new, separate .git in this folder
 git rev-parse --show-toplevel     # must print THIS folder, not the parent
-git add .
+git add .                         # stages everything, including files you may not expect
 git status                        # no path may start with ../
-git commit -m "Initial commit"
-git remote add origin <url>
-git branch -M main
-git push -u origin main
+git commit -m "Initial commit"    # first commit, local only
+git remote add origin <url>       # link the local repo to the empty GitHub repo
+git branch -M main                # rename the current branch to main
+git push -u origin main           # upload and set upstream tracking
 ```
 
 ### Confirm
 
 ```bash
-git log --oneline
-git status
-git ls-files
+git log --oneline                 # full history for this branch
+git status                        # staged, unstaged, untracked, and branch tracking
+git ls-files                      # every file Git currently tracks
 ```
 
 ### Preventing it permanently
@@ -443,9 +443,9 @@ The habit that makes this section unnecessary — the first three commands in an
 project folder, before writing code:
 
 ```bash
-cd <new-project-folder>
-git init
-git rev-parse --show-toplevel
+cd <new-project-folder>           # do this before writing any code
+git init                          # creates a new, separate .git in this folder
+git rev-parse --show-toplevel     # prints the repo root Git is actually using
 ```
 
 [⬆ Back to top](#contents)
@@ -488,16 +488,16 @@ after it leaves the disk, so you can always read it before deciding.
 Commit the deletion:
 
 ```bash
-git rm <file-1> <file-2>
+git rm <file-1> <file-2>          # stage the deletion of both files
 git status                        # confirm only these two are staged
-git commit -m "Remove <file-1> and <file-2>"
-git push
+git commit -m "Remove <file-1> and <file-2>"# record the deletion
+git push                          # upstream is already set, so no arguments needed
 ```
 
 Or restore the files:
 
 ```bash
-git restore <file-1> <file-2>
+git restore <file-1> <file-2>     # bring both back from the last commit
 ```
 
 `git restore` works here precisely because the files are still tracked — Git pulls them
