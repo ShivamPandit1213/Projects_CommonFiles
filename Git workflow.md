@@ -22,6 +22,8 @@ Each workflow below follows the same four steps — **Verify → Read → Act �
 - [Workflow 7 — Isolating a project from a shared parent](#workflow-7--isolating-a-project-from-a-shared-parent)
 - [Workflow 8 — Files show as deleted but not staged](#workflow-8--files-show-as-deleted-but-not-staged)
 - [Workflow 9 — Switching branches](#workflow-9--switching-branches)
+- [Workflow 10 — Keeping two clones in sync](#workflow-10--keeping-two-clones-in-sync)
+- [Troubleshooting index](#troubleshooting-index)
 - [Commands that need a check first](#commands-that-need-a-check-first)
 
 ---
@@ -603,6 +605,163 @@ git log --oneline -3              # your commit on top
 
 Then refresh the repository's Branches page. The branch should read 0 behind and however
 many commits ahead you pushed.
+
+[⬆ Back to top](#contents)
+
+---
+
+## Workflow 10 — Keeping two clones in sync
+
+Two working copies of the same repository drift independently. Each has its own branch,
+its own uncommitted work, and its own snapshot of the remote. Neither knows the other
+exists, and `git status` in one tells you nothing about the other.
+
+### Verify — in each clone separately
+
+```bash
+git rev-parse --show-toplevel     # which clone am I in
+git branch                        # which branch this clone is on
+git status                        # uncommitted work, and its branch
+git fetch origin                  # refresh this clone's remote snapshot
+git log --oneline HEAD..origin/main    # commits this clone is missing
+```
+
+Run these in the second clone before assuming anything. A clone that has not fetched
+recently reports "up to date" from a cached snapshot that may be days old.
+
+### Read
+
+The fetch output names the branch tips, which is where a stale clone shows itself:
+
+```text
+f90bc4c (main) Remove Coal.txt and Payload.json
+bb6e9a7 (origin/main, origin/HEAD) Add README pointing at ProjectInfo.html
+```
+
+Local `main` sits at `f90bc4c` while `origin/main` is at `bb6e9a7` — six commits behind.
+The label in parentheses tells you where each ref points.
+
+### Act — finish outstanding work first
+
+Uncommitted work belongs to the clone and the branch it is sitting on. Commit or stash
+it before switching or merging, or it follows you somewhere it does not belong.
+
+```bash
+git status                        # read what is outstanding
+git add <files>                   # stage deliberately, not with a blanket .
+git commit -m "what changed"             # one commit, one change
+git push origin <branch>          # push the branch you are actually on
+```
+
+### Act — then sync
+
+```bash
+git switch main                   # close the IDE first; see Workflow 9
+git log --oneline HEAD..origin/main    # confirm what is incoming
+git merge origin/main             # fast-forward when nothing is local
+git log --oneline -3              # newest remote commit should be on top
+```
+
+### Confirm
+
+```bash
+git status                        # "up to date with 'origin/main'"
+git log --oneline origin/main..HEAD    # empty means nothing unpushed
+```
+
+### Pick one clone and stay in it
+
+Two clones is a workflow smell, not a feature. Files deleted in one still exist in the
+other; ignore rules fixed in one stay broken in the other; and work committed in one is
+invisible until the other fetches.
+
+If a second clone exists for a reason — a different branch checked out long-term, or a
+separate build — keep it read-only and do the work in one place.
+
+> **Avoid keeping a clone inside a synced folder** such as OneDrive, Dropbox or Google
+> Drive. The sync client replicates `.git` while Git is writing to it, which can corrupt
+> the index mid-operation, and it uploads every `target/` and `test-output/` rebuild. A
+> plain local path is the safer home.
+
+[⬆ Back to top](#contents)
+
+---
+
+## Troubleshooting index
+
+Find the message you are seeing, read the cause, run the fix. Every entry here was hit
+on this project.
+
+### Git — remote and sync
+
+| Message or symptom | Cause | Fix |
+|---|---|---|
+| `! [rejected] main -> main (fetch first)` | Remote has commits you do not | `git fetch` then compare both directions — [Workflow 3](#workflow-3--push-rejected) |
+| `Your branch and 'origin/main' have diverged, and have 1 and 9 different commits` | Often **stale** — your remote snapshot predates a merge | `git fetch origin` then `git log --oneline origin/main..HEAD`. Empty means you are only behind; the pull fast-forwards |
+| `Your branch is behind 'origin/main' by 2 commits, and can be fast-forwarded` | Simply behind, no conflict | `git pull --rebase origin main` |
+| `fatal: 'origin' does not appear to be a git repository` | No remote configured | `git remote add origin <url>` |
+| `error: remote origin already exists.` | `git remote add` run twice | `git remote set-url origin <url>` |
+| `remote: Repository not found.` | URL points at a repo that does not exist | Check `git remote -v` against the browser URL |
+| `src refspec main does not match any` | No commits exist yet on that branch | Commit first, then push |
+
+### Git — working tree and staging
+
+| Message or symptom | Cause | Fix |
+|---|---|---|
+| `deleted: <file>` under *not staged* | File removed from disk, deletion not recorded | Intentional → `git rm <file>`. Accidental → `git restore <file>` — [Workflow 8](#workflow-8--files-show-as-deleted-but-not-staged) |
+| `error: pathspec '<file>' did not match any file(s) known to git` | The file is untracked, or already unstaged | Nothing to fix. `git rm --cached` only works on tracked files |
+| A credentials file appears as untracked after switching branches | `.gitignore` is tracked, so it **differs per branch** | `git checkout origin/main -- .gitignore` — [Workflow 9](#workflow-9--switching-branches) |
+| `git add .` staged files you did not expect | `.` means everything not ignored | `git restore --staged <file>`, then add the ignore rule |
+| A file you deleted is still present in another clone | Clones are independent working copies | Fetch and merge in that clone — [Workflow 10](#workflow-10--keeping-two-clones-in-sync) |
+| A clone reports "up to date" but is six commits behind | Its remote snapshot is cached, not live | `git fetch origin` before trusting any status |
+| Empty folders left behind after a branch switch | Windows held directory handles open | Close the IDE, delete the folders manually. Git does not track empty directories |
+| `Deletion of directory '...' failed. Should I try again? (y/n)` | Same as above, during the switch | Answer `n`. The switch still completes |
+
+### Git — history and recovery
+
+| Message or symptom | Cause | Fix |
+|---|---|---|
+| Committed to the wrong branch | Uncommitted work follows you across a switch | `git reset --soft HEAD~1`, switch, commit again |
+| Committed a file that should never have been committed | — | Deleting it later does **not** remove it from history. Rotate the secret, then `git filter-repo` |
+| A commit seems to have vanished | Usually after `reset --hard` | `git reflog`, find the hash, `git show <hash>`, then `git reset --hard <hash>` — [Workflow 6](#workflow-6--recovering-lost-work) |
+| Conflict markers `<<<<<<<` committed by mistake | Resolved and staged without deleting the markers | `grep -rn "<<<<<<<" . ` then fix each file and amend |
+| Terminal stuck at a `:` prompt | Git's pager is waiting | Press `q`. Permanently: `git config --global core.pager cat` |
+| `warning: CRLF will be replaced by LF` | Line-ending normalisation | Expected on Windows with a `.gitattributes` in place. Not an error |
+
+### Maven and TestNG
+
+| Message or symptom | Cause | Fix |
+|---|---|---|
+| A browserless suite launches real browsers | Surefire 3.6.0+ drops `surefire-testng` and routes TestNG through the JUnit Platform engine, ignoring `<suiteXmlFiles>` | Pin `<surefire.version>` to 3.5.6 or lower **and** pin the provider as a plugin-level dependency |
+| `Using auto detected provider ...TestNGProvider` | Provider resolved implicitly — a version bump can change it silently | Pin it explicitly; the log should then read `Using configured provider` |
+| Test count far higher than the suite declares | The suite file is being ignored | Compare two runs: `mvn test -DsuiteFile=suites/config.xml` against plain `mvn test`. Different counts mean the suite file **is** being read |
+| `Running TestSuite` instead of the suite's name | Surefire's own label for the TestNG run | Not a fault. Judge by test count and elapsed time, not this line |
+| `Tests run: 0` with BUILD SUCCESS | Suite points at packages that no longer exist | Check the package names in the suite file against the source tree after any refactor |
+| `skip non existing resourceDirectory src/test/resources` | Directory absent because Git does not track empty folders | Add a `.gitkeep` file inside it |
+| `SLF4J(W): No SLF4J providers were found` | No logging binding on the classpath | Harmless. Add `slf4j-simple` with test scope to silence it |
+| Surefire declared under project `<dependencies>` | It is a build plugin, not a dependency | Move it to `<build><plugins>`. A provider pin belongs in `<plugin><dependencies>` |
+
+### Jenkins
+
+| Message or symptom | Cause | Fix |
+|---|---|---|
+| Build runs on the controller | `agent any` with no agents configured | Use `agent { label '...' }`; set the controller to 0 executors |
+| A hung browser pins an executor forever | No pipeline timeout | `options { timeout(time: 30, unit: 'MINUTES') }` |
+| A failed build goes unnoticed for weeks | No notification configured | `post { failure { emailext(...) } }` |
+| Checkout appears twice in the stage view | An explicit `checkout scm` stage plus Declarative's automatic one | Delete the explicit stage |
+| Every build reports "No Changes" | Nothing triggers it but a human | Add `githubPush()` and a `cron` trigger |
+| Green build, nothing actually tested | Zero tests still passes | `junit testResults: '...', allowEmptyResults: false` |
+
+### API testing — the traps that return a 200
+
+| Message or symptom | Cause | Fix |
+|---|---|---|
+| Validation errors that do not match the payload you sent | A reused Idempotency-Key replayed a cached response | Rotate the key on every request — `{{$guid}}` in Postman |
+| `Invalid signature` | The body changed after the signature was generated, including whitespace | Finalise the body, sign it, send without editing. Never press Beautify after signing |
+| `errorCode: null` but the record is incomplete | HTTP 200 is returned for success, validation failure and auth failure alike | Assert on `errorCode` **and** on the contents of `resultIds`, never on status alone |
+| Two identical `requestId` values in a row | The second response is a cached replay | Rotate the key. A genuine request always returns a new id |
+| Data sent but silently not stored | Row identifiers missing, so the server cannot match the rows | Send the ids returned by the create response, with `actionFlag: "U"` |
+| Duplicate child rows after an update | Id `0` with `actionFlag: "I"` means insert | Real id plus `"U"` modifies; the identifier decides, not the endpoint |
 
 [⬆ Back to top](#contents)
 
