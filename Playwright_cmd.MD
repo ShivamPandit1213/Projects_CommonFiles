@@ -25,6 +25,7 @@ Each row is a command and **when** to reach for it. Everything runs in PowerShel
 - [9. Upgrade and clean up](#9-upgrade-and-clean-up)
 - [10. Git and CI](#10-git-and-ci)
   - [Everyday](#everyday)
+  - [Push: which command, when](#push-which-command-when)
   - [First push to a new repository](#first-push-to-a-new-repository)
   - [Remote](#remote)
   - [CI](#ci)
@@ -175,14 +176,29 @@ Both folders are rewritten on every run and are git-ignored. Copy a file out bef
 
 | Command | What it does / when to use it |
 |---|---|
-| `git status --short` | What changed: `M` modified, `D` deleted, `??` new. |
-| `git add -A` | Stage everything. |
-| `git commit -m "message"` | Record it. A push uploads **commits**, never loose changes — uncommitted work stays local. |
-| `git push` | Upload (after the first push, below). |
+| `git status --short` | What changed: `M` modified, `D` deleted, `??` new. Long form: `git status`. |
+| `git add -A` | Stage everything, including deletions. `git add .` does the same from the project root. **Not** `git add ..` — two dots is the parent folder, which is outside the repository. |
+| `git commit -m "message"` | Record it. A push uploads **commits**, never loose changes — uncommitted work stays local however often you push. |
+| `git push` | Upload the committed work — see [Push](#push-which-command-when) for which form to use. |
 | `git pull` | Bring down changes from GitHub. |
 | `git log --oneline -5` | Last five commits — is today's work in one? |
 | `git diff` | Unstaged changes, line by line. |
 | `git restore <file>` | Throw away local changes to one file. |
+
+### Push: which command, when
+
+| Command | When | What happens |
+|---|---|---|
+| `git push` | Every day, once the branch is linked to GitHub (after its first `-u` push). | Uploads the new commits of the current branch to the branch it tracks. On a branch that is **not** linked yet it stops with `fatal: The current branch main has no upstream branch` and uploads nothing — even right after a successful commit. |
+| `git push -u origin main` | The **first** push of a branch: a brand-new repository, or a new local branch GitHub has never seen. | Uploads the branch **and** links it (`-u` = `--set-upstream`), so plain `git push` and `git pull` work from then on. Confirms with `branch 'main' set up to track 'origin/main'`. Once per branch, not once per repository. |
+| `git push --set-upstream origin main` | Same situation — this is the long spelling Git prints in the error message. | Identical to `-u`. |
+| `git push origin main` | A one-off push you don't want to link, e.g. a throwaway branch. | Uploads, but the branch stays unlinked, so plain `git push` keeps failing. Prefer `-u` once. |
+| `git push --dry-run` | Before a push you are unsure about. | Shows what would be uploaded; uploads nothing. |
+| `git branch -vv` | To know in advance whether plain `git push` will work. | Lists local branches with the remote branch each one tracks, e.g. `main ... [origin/main]`. No bracket = not linked → use `-u`. |
+| `git config --global push.autoSetupRemote true` | Once on this PC, if you'd rather never type `-u`. | Plain `git push` links a new branch automatically (the setting Git itself suggests in the error). |
+| `git push --force-with-lease` | Only after you rewrote commits that were already pushed (`git commit --amend`, a rebase), and only on **your own** branch. | Replaces the remote branch with yours, but refuses if someone else pushed in between. Never on a shared `main`; never plain `--force`. |
+
+A browser sign-in window may open on the first push to a repository: use the account that owns it. Every push to `main` also starts the GitHub Actions run (see [CI](#ci)).
 
 ### First push to a new repository
 
@@ -190,11 +206,9 @@ In this order:
 
 1. `git remote -v` — connected? Must print `origin` → the repo URL.
 2. `git status --short` — anything listed here is **not** going up yet.
-3. `git add -A` — stage it all.
-4. `git commit -m "message"` — commit it.
+3. `git add -A` — stage it all. (Expect `LF will be replaced by CRLF` warnings on Windows; they are harmless — see [Git troubleshooting](#git).)
+4. `git commit -m "message"` — commit it. The summary line (`20 files changed, 652 insertions(+), 229 deletions(-)`) is your check that everything was included.
 5. `git push -u origin main` — upload and link local `main` to GitHub `main`. From now on plain `git push` is enough.
-
-A browser sign-in window may open: use the account that owns the repo. The push also starts the GitHub Actions run (see [CI](#ci)).
 
 ### Remote
 
@@ -266,9 +280,11 @@ When anything fails, in this order:
 
 | Symptom | Cause | Fix |
 |---|---|---|
+| `fatal: ..: '..' is outside repository` | Typed `git add ..` — two dots is the parent folder. | `git add .` or `git add -A` |
+| `warning: in the working copy of '...', LF will be replaced by CRLF the next time Git touches it` | Harmless. Git on Windows converts line endings on checkout (`core.autocrlf=true`); the files were written with LF. | Ignore it, or silence it for good: create `.gitattributes` containing `* text=auto eol=lf`, then `git add --renormalize .` and commit. |
+| `fatal: The current branch main has no upstream branch` | First push of this branch — it is not linked to GitHub yet. Committing does not change that. | `git push -u origin main` (once); see [Push](#push-which-command-when). |
 | `error: No such remote 'origin'` | There is no remote to change or remove — an earlier `remove` already worked. | `git remote -v` to confirm; if empty: `git remote add origin <url>` |
 | `error: remote origin already exists` | Already connected. | `git remote -v` shows where. To point it somewhere else use `git remote set-url origin <url>`, not `add`. |
-| `fatal: The current branch main has no upstream branch` | First push to this remote. | `git push -u origin main` (once) |
 | Pushed, but GitHub shows the old files / today's work is missing | The changes were never committed; a push uploads commits only. | `git status --short` lists them → `git add -A`, `git commit`, `git push` |
 | `Updates were rejected because the remote contains work that you do not have` | The GitHub repo was created with a README or .gitignore, or someone else pushed. | `git pull --rebase origin main`, then `git push` |
 | `remote: Permission denied` / 403 on push | Windows saved a different GitHub login. | Control Panel → Credential Manager → Windows Credentials → remove the github.com entry, push again and sign in as the repository owner. |
