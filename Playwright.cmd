@@ -1,4 +1,63 @@
 /*
+
+PlaywrightBasic1 — git session (folder: C:\Users\shiva\OneDrive\JavaSelenium\PlaywrightBasic1)
+│
+├── 1. What was typed and what came back
+│   ├── git remote remove origine ........ error: No such remote 'origine'   (typo)
+│   ├── git remote remove origin ......... (no output = it worked; remote gone)
+│   ├── git remote remove origin ......... error: No such remote 'origin'    (already gone)
+│   ├── git remote -v .................... (empty)
+│   ├── git remote set-url origin <url> .. error: No such remote 'origin'    (set-url needs one to exist)
+│   ├── git remote add origin <url> ...... error: remote origin already exists (Claude Code had re-added it)
+│   │   └── git remote -v ................ origin → https://github.com/ShivamPandit1213/PlaywrightBasic1.git ✔
+│   ├── git push ......................... fatal: branch main has no upstream branch
+│   └── git push origin .................. same error
+│
+├── 2. Why those two errors are harmless
+│   ├── "remote origin already exists" ... duplicate add; the remote is set correctly
+│   └── "no upstream branch" ............. first push to a new repo must use -u
+│
+├── 3. Repository state (git log / git status --short)
+│   ├── Commits ......................... 8fe6b76  Initial commit   (the only one)
+│   └── Uncommitted changes (20)
+│       ├── Modified (5)
+│       │   ├── .github/workflows/playwright.yml
+│       │   ├── .gitignore
+│       │   ├── package-lock.json
+│       │   ├── package.json
+│       │   └── playwright.config.js
+│       ├── Deleted (10) — the old Java module
+│       │   ├── PlaywrightBasic/.classpath, .gitignore, .project
+│       │   ├── PlaywrightBasic/.settings/  (core.resources, jdt.core, m2e.core prefs)
+│       │   ├── PlaywrightBasic/pom.xml
+│       │   ├── PlaywrightBasic/src/main/java/basic/App.java
+│       │   ├── PlaywrightBasic/src/test/java/tests/AppTest.java
+│       │   └── tests/example.spec.js
+│       └── Untracked / new (5)
+│           ├── Playwright_CMD.java
+│           ├── ProjectInfo.html
+│           ├── pages/
+│           ├── tests/home.spec.js
+│           └── tests/paimana.spec.js
+│
+├── 4. Warning
+│   └── Don't push yet — nothing from today is committed; a push now would
+│       upload only "Initial commit" (Java module + demo test), none of the new work
+│
+├── 5. Commands to run, in order
+│   ├── git add -A ....................... stage all 20 changes
+│   ├── git commit -m "Reorganise into a single JavaScript Playwright project"
+│   └── git push -u origin main .......... upload + link local main to GitHub main
+│       └── afterwards: plain  git push  is enough
+│
+├── 6. What to expect after the push
+│   ├── GitHub sign-in window ............ use the ShivamPandit1213 account (owns the repo)
+│   └── First GitHub Actions run starts automatically
+│       └── if it fails there but passes locally → GitHub's servers can't reach iigdev.uatnegd.online
+│
+└── 7. Open question at the end
+    └── "Do you want me to run the three commands for you?"  — unanswered
+
 ========================================================================
   PlaywrightBasic1  -  Playwright command reference
 ========================================================================
