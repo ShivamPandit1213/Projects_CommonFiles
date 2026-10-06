@@ -6,6 +6,23 @@ recovery, remote management, and the Playwright / Cucumber test CLIs.
 Commands assume **Windows `cmd`** unless marked otherwise. Examples use the
 repositories `ShivamPandit1213/PAIMANA_Dev` and `ShivamPandit1213/PAIMANA_PlaywrightMavenJavaSelenium`.
 
+Command cheat sheet
+
+npm ci                               # install exact dependencies
+npx playwright install               # download browsers (first time / after upgrades)
+
+npm test                             # everything
+npm run test:headed                  # maximized windows
+npm run test:headless                # no windows
+npm run test:chromium                # one browser, quick
+npm run test:smoke                   # @smoke only
+npm run test:headed -- --workers=4   # extra options after --
+npm run report                       # open the last HTML report
+
+npm run check                        # lint + format check
+npm run lint:fix                     # auto-fix lint problems
+npm run format                       # auto-format
+
 ---
 
 ## Table of Contents
