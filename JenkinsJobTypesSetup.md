@@ -569,6 +569,10 @@ MINUTE  HOUR  DAY-OF-MONTH  MONTH  DAY-OF-WEEK
 | HTML report archives the whole workspace | **Directory to archive** left blank in *Publish HTML reports* | Set it to the report folder, e.g. `playwright-report`. |
 | Browser windows are oversized or run off-screen in a headed Jenkins run | `CI` is set in the build environment, so the test config assumes headless sizes, while `--headed` forces windows open anyway | Switch headed mode through the project's own setting (e.g. `HEADLESS=false`), not the `--headed` flag. See [Section 14.4](#144-headed-vs-headless-runs). |
 | Headed browsers never appear / tests hang on Windows | Jenkins runs as a Windows service, which has no visible desktop | Run headless, or start Jenkins (or an agent) in a logged-in user session. |
+| Published HTML report (Playwright, Cypress, Allure, etc.) shows a blank page | Jenkins serves archived files with a strict Content Security Policy that blocks JavaScript and inline styles | Relax the CSP for a local Jenkins, or download the report with **Zip**. See [Section 14.7](#147-viewing-the-playwright-report-in-jenkins). |
+| Tests run one at a time on Jenkins but in parallel locally | The test config limits workers when `CI` is set (Playwright's default template does this) | Set the worker count explicitly in the build step, e.g. `--workers=4`. See [Section 14.8](#148-running-tests-in-parallel-on-jenkins). |
+| A `%` value in a Windows batch step arrives wrong (e.g. `50%` becomes `50`) | Jenkins saves the step as a `.bat` file, where `%` starts a variable | Write `%%` for a literal percent sign: `set WORKERS=50%%`. |
+| E-mail Notification fails with `Couldn't connect to host, port: localhost, 25` | Jenkins has no SMTP server set, so it tries the local PC | Configure **Manage Jenkins → System → E-mail Notification** (e.g. `smtp.gmail.com`, port 587, TLS, app password). |
 
 ---
 
@@ -666,7 +670,7 @@ Field names below match the Jenkins 2.568 screen. Values marked ✏️ need chan
 | Escape underscores in Report Title | ✅ ticked (default) | ⬜ Optional | Turns `_` in the title into a URL-safe form. Leave as is. |
 | Number of workers | `0` (default) | ⬜ Optional | Parallel copy threads. `0` copies on the build's own thread, fine for a small report. |
 
-> The Playwright HTML report uses JavaScript, which Jenkins's default Content Security Policy blocks, so it may open blank. Download the archived folder instead, or have an administrator relax the CSP for the HTML Publisher.
+> The Playwright HTML report needs JavaScript, which Jenkins's default Content Security Policy blocks, so the report opens as a blank page. See [Section 14.7](#147-viewing-the-playwright-report-in-jenkins) for the fix.
 
 **Post-build Actions → E-mail Notification** (built into Jenkins core)
 
@@ -674,17 +678,17 @@ Field names below match the Jenkins 2.568 screen. Values marked ✏️ need chan
 |---|---|---|---|
 | Recipients | `qa-team@example.com shivam@example.com` | ⚠️ Conditionally mandatory | Who gets the email. Separate addresses with spaces, not commas. Build parameters like `$NOTIFY_TO` also work. Leaving it blank means nobody is emailed. |
 | Send e-mail for every unstable build | ✅ ticked (default) | ⬜ Optional | Ticked: an email for every unstable build. Unticked: only the first unstable build after a stable one. |
-| Send separate e-mails to individuals who broke the build | ☐ unticked | ⬜ Optional | Also emails the authors of the commits in the failing build. Only useful when commit authors' emails match Jenkins users. |
+| Send separate e-mails to individuals who broke the build | ☐ unticked | ⬜ Optional | Also emails the authors of the commits in the failing build. Only works when a commit author's email belongs to a Jenkins user; otherwise the console shows `Not sending mail to unregistered user <address>` and skips them (harmless). |
 
 This action only sends mail when a build **fails**, becomes **unstable**, or **returns to stable**. A passing build after a passing build sends nothing.
 
-It also needs Jenkins to know how to send mail. Configure that once under **Manage Jenkins → System → E-mail Notification**:
+It also needs Jenkins to know how to send mail. Until you configure it, Jenkins tries a mail server on your own PC (`localhost`, port `25`), and every failed build ends with `Couldn't connect to host, port: localhost, 25`. Configure it once under **Manage Jenkins → System → E-mail Notification**:
 
 | Field | Example value (Gmail) | Status | Purpose |
 |---|---|---|---|
 | SMTP server | `smtp.gmail.com` | ✅ Mandatory for email | Mail server Jenkins sends through. |
 | Default user e-mail suffix | `@example.com` | ⬜ Optional | Turns Jenkins user names into addresses for "individuals who broke the build". |
-| Advanced → Use SMTP Authentication → User Name / Password | your address / an app password | ⚠️ Conditionally mandatory | Gmail and most providers require login. Use an app password, not your normal password. |
+| Advanced → Use SMTP Authentication → User Name / Password | your Gmail address / a 16-character app password | ⚠️ Conditionally mandatory | Gmail and most providers require login. Your normal Gmail password is rejected. Create an app password at **Google Account → Security → App passwords**; the option only appears once **2-Step Verification** is on. |
 | Advanced → Use SSL / Use TLS | TLS ticked | ⚠️ Conditionally mandatory | Encryption the server expects. |
 | Advanced → SMTP Port | `587` (TLS) or `465` (SSL) | ⚠️ Conditionally mandatory | Must match the encryption choice. |
 | Test configuration by sending test e-mail → Test e-mail recipient | your address | ⬜ Optional | Sends a test mail so you know SMTP works before a real build fails. |
@@ -743,13 +747,172 @@ The machine couldn't open a connection to GitHub. Bad credentials look different
 
 > **Manage Jenkins → Plugins → Advanced → HTTP Proxy** only affects plugin downloads, not the `git` command used for checkout.
 
+**Reading a failed build log**
+
+One failure often produces several errors further down the log. Fix the **first** one; the rest usually disappear with it. A typical chain:
+
+1. `Error: playwright.config.js: config.workers must be a number or percentage` → tests never start.
+2. `Build step 'Execute Windows batch command' marked build as failure`.
+3. `Specified HTML directory ... playwright-report does not exist` → no report, because no tests ran.
+4. `Couldn't connect to host, port: localhost, 25` → the failure email can't be sent (separate mail setup issue).
+
 **Other symptoms seen with this job**
 
 | Symptom | Cause | Fix |
 |---|---|---|
 | Firefox tests time out on `page.goto` | A third-party font never finishes loading, so Firefox's `load` event never fires | Navigate with `waitUntil: 'domcontentloaded'`; assertions still wait for their own elements. |
-| `Running N tests using 1 worker` in Jenkins but more locally | `CI` is set in the build environment | Expected; it also switches on retries. Use `test:headed`/`test:headless` to choose the window mode. |
+| `Running N tests using 1 worker` in Jenkins but more locally | `CI` is set in the build environment, and the config sets `workers: 1` when `CI` is set | Pass a worker count from the build step. See [Section 14.8](#148-running-tests-in-parallel-on-jenkins). |
+| **Playwright Report** link opens a blank page with only *Back to …* and *Zip* | Jenkins's Content Security Policy blocks the report's JavaScript | See [Section 14.7](#147-viewing-the-playwright-report-in-jenkins). |
 | `HEADLESS must be 'true' or 'false'` | A typo in the `HEADLESS` value | Use exactly `true` or `false`. |
+| `config.workers must be a number or percentage` | The config passes the `WORKERS` environment variable (always text, e.g. `"50"`) straight to Playwright | Convert it in the config with `resolveWorkers()`, see [Section 14.8](#148-running-tests-in-parallel-on-jenkins). |
+| Console shows `set WORKERS=50` although the step says `50%` | `%` is special in `.bat` files | Write `set WORKERS=50%%`, or use a whole number like `4`. |
+| `Specified HTML directory '...\playwright-report' does not exist` | The tests never ran (an earlier error stopped the build), so no report was written | Fix the first error in the console. Tick **Allow missing report** so this extra error doesn't appear. |
+| `Couldn't connect to host, port: localhost, 25` | No mail server configured in Jenkins | Set SMTP under **Manage Jenkins → System → E-mail Notification**, see [Section 14.2](#142-field-by-field-configuration). |
+| `Not sending mail to unregistered user <address>` | *Send separate e-mails to individuals who broke the build* is ticked and the commit author isn't a Jenkins user | Harmless. Untick the option if you don't need it. |
+
+### 14.7 Viewing the Playwright Report in Jenkins
+
+After the HTML Publisher is set up ([Section 14.2](#142-field-by-field-configuration)), the job page shows a **Playwright Report** link in the left menu and above **Permalinks**. Clicking it may show only a thin bar with **Back to Paimana_Dev**, a **Playwright Results** tab and **Zip**, and nothing below.
+
+**Why:** the report was archived correctly, but the Playwright report is a single-page JavaScript app. Jenkins serves every archived file with a strict Content Security Policy (CSP) header that blocks scripts, so the page never draws. Nothing is wrong with the job or the tests.
+
+Choose one of these fixes.
+
+**Option A: relax the CSP until Jenkins restarts (quick test)**
+
+1. Go to **Manage Jenkins → Script Console** (`http://localhost:8080/manage/script`).
+2. The **Console** box already holds a sample line (`println(Jenkins.instance.pluginManager.plugins)`). Click inside it, press **Ctrl+A**, then **Delete**.
+3. Paste this and click **Run** (bottom right):
+
+   ```groovy
+   System.setProperty("hudson.model.DirectoryBrowserSupport.CSP", "")
+   println("CSP is now: [" + System.getProperty("hudson.model.DirectoryBrowserSupport.CSP") + "]")
+   ```
+
+4. The result below the box should read `CSP is now: []`. Empty brackets mean the restriction is off.
+5. Reopen the report and press **Ctrl+F5**. No rebuild is needed: the CSP is a header Jenkins adds each time it serves the page, so existing reports work straight away.
+
+The setting is lost when Jenkins restarts, so run it again after every restart (or use Option B).
+
+**How to tell a blocked report from an empty one**
+
+A Playwright report keeps its results inside `index.html`, so a blank page doesn't mean the data is missing. Check before changing anything:
+
+| Check | Result | Meaning |
+|---|---|---|
+| On the blank report page press **F12 → Console** | Red errors such as *Refused to execute inline script because it violates the following Content Security Policy directive* | The data is there; the CSP blocks it. Use Option A or B. |
+| Job page → **Workspace → playwright-report** | `index.html` of several hundred KB | The report was written correctly. A `data` folder only appears when tests saved screenshots or traces. |
+| Same place | No folder, or a tiny `index.html` | The report wasn't written: the test run failed to start or was aborted. Check the build's **Console Output**. |
+| Build list icon | Grey slash (aborted) | Playwright writes the report only when the run ends, so an aborted build leaves no new report. The job-level **Playwright Report** link then shows the last *successful* build's report; open a specific build to see its own. |
+
+**Option B: relax the CSP permanently**
+
+Add the same setting to the command that starts Jenkins:
+
+```bat
+java -Dhudson.model.DirectoryBrowserSupport.CSP="" -jar jenkins.war
+```
+
+If you start Jenkins from a shortcut or a `.bat` file, edit the command there. If Jenkins is installed as a Windows service, add the `-D...` argument in `jenkins.xml` inside the `<arguments>` element, before `-jar`, then restart the service.
+
+| Field / setting | Example value | Purpose |
+|---|---|---|
+| `hudson.model.DirectoryBrowserSupport.CSP` | `""` (empty) | Turns off the CSP header for archived files, so reports can run their JavaScript. |
+
+**Security trade-off:** with the CSP off, any HTML a build archives can run scripts while you're logged in to Jenkins. That's acceptable on a personal Jenkins that only builds your own repositories. On a shared Jenkins, prefer Option C or D.
+
+**Option C: download the report instead (no Jenkins change)**
+
+1. On the blank report page, click **Zip** (top right).
+2. Unzip it, then from the folder containing the unzipped report run:
+
+   ```bat
+   npx playwright show-report <unzipped-folder>
+   ```
+
+   `show-report` serves the report over a local web server. Opening `index.html` directly from disk also mostly works, but traces need the server.
+
+**Option D: Resource Root URL (shared Jenkins)**
+
+An administrator can set **Manage Jenkins → System → Serve resource files from another domain → Resource Root URL** to a second hostname that points at the same Jenkins (e.g. `http://jenkins-files.example.local:8080/`). Jenkins then serves archived files from that separate address, isolating them from your login session, which lets reports work more safely. It needs a second DNS name or hosts-file entry; check the Jenkins documentation on *Configuring Content Security Policy* before relying on it.
+
+### 14.8 Running Tests in Parallel on Jenkins
+
+**Symptom:** the console shows `Running 7 tests using 1 worker` in Jenkins, while the same project uses several workers locally (`Running 7 tests using 6 workers`), so the Jenkins run takes several times longer.
+
+**Cause:** Playwright's default config template contains
+
+```js
+workers: process.env.CI ? 1 : undefined,
+```
+
+Locally `CI` isn't set, so Playwright picks the number of workers itself (half the CPU cores). In this Jenkins job `CI` is set, so the config forces one worker and every test runs after the previous one. `fullyParallel: true` doesn't help: it only spreads tests across the workers that exist. The template assumes CI machines are small shared containers, which isn't true for a Jenkins running on your own PC.
+
+The same `CI` check sets `retries: 2`, which is fine to keep on Jenkins.
+
+**Option A: pass the worker count in the build step (no code change)**
+
+The `--workers` command-line option overrides the config. With an npm script, put `--` before it so npm passes it on to Playwright:
+
+```bat
+call npm ci
+call npx playwright install
+call npm run test:headed -- --workers=4
+```
+
+**Option B: let a `WORKERS` variable override the CI default (project change)**
+
+In `playwright.config.js`, add this function above `defineConfig` and use it for `workers`:
+
+```js
+/**
+ * Number of parallel workers. Priority: WORKERS env var > CI (1) > Playwright's default.
+ * WORKERS can be a whole number (4) or a percentage of CPU cores (50%).
+ */
+function resolveWorkers() {
+  const value = process.env.WORKERS?.trim();
+  if (!value) return process.env.CI ? 1 : undefined;
+  if (/^\d+%$/.test(value)) return value; // "50%" stays text
+  if (/^\d+$/.test(value)) return Number(value); // "4" becomes the number 4
+  throw new Error(
+    `WORKERS must be a number like 4 or a percentage like 50%, got '${process.env.WORKERS}'`,
+  );
+}
+
+export default defineConfig({
+  workers: resolveWorkers(),
+  // ...rest unchanged
+});
+```
+
+**Why the conversion matters:** environment variables are always text. Playwright accepts `workers` as a number (`4`) or as percentage text (`"50%"`), but rejects plain text like `"4"` with `config.workers must be a number or percentage`. Passing `process.env.WORKERS` straight through (e.g. `workers: process.env.WORKERS ?? ...`) fails this way. `.trim()` also removes a trailing space, which `set` in a batch file keeps.
+
+Then set it in the Jenkins build step:
+
+```bat
+set WORKERS=4
+call npm ci
+call npx playwright install
+call npm run test:headed
+```
+
+For a percentage, write `set WORKERS=50%%`. Jenkins saves the step as a `.bat` file, where a single `%` starts a variable name, so `50%` arrives as `50`. That's then read as **50 workers**, i.e. up to 50 browsers at once, not half the CPU. Don't put a space after the value either: `set WORKERS=4 ` stores `4 ` with the space.
+
+You can confirm what the build received in the console: Jenkins echoes each batch line, e.g. `set WORKERS=50` shows the `%` was lost.
+
+Option B also needs the change pushed to Git ([Section 14.5](#145-getting-local-changes-into-jenkins)), and `WORKERS` added to `.env.example` so others know it exists. You can also set it once for all jobs under **Manage Jenkins → System → Global properties → Environment variables** (Name `WORKERS`, Value `4`).
+
+**Choosing a number**
+
+| Value | When to use |
+|---|---|
+| `1` | Tests share state that can't run at the same time (e.g. the same test user changing data). |
+| `2`–`4` | Recommended for Jenkins on a desktop PC: Jenkins, the browsers and anything else you're doing share the same CPU and memory. |
+| `50%` | A dedicated build machine with nothing else running. |
+
+In headed mode, each worker opens its own maximized window, so several windows stack on top of each other. That's harmless, but if you're watching the run, fewer workers make it easier to follow.
+
+**Check:** after the change, the console's first test line should read `Running 7 tests using 4 workers` (or your number, capped at the number of tests).
 
 ---
 
