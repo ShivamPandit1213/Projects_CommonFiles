@@ -624,9 +624,12 @@ A real Freestyle job that runs a JavaScript Playwright project (`Paimana_Dev`) f
 
 **Build Steps → Execute Windows batch command**
 
-| Field | Value | Status | Purpose |
+Your screen currently has the first and last of these lines; the middle one is recommended.
+
+| Field (as on screen) | Example value | Status | Purpose |
 |---|---|---|---|
-| Command | see below | ⚠️ Conditionally mandatory | The actual work. |
+| Command | see block below | ⚠️ Conditionally mandatory | The actual work of the job. Without it, the build "succeeds" but runs no tests. |
+| Advanced → ERRORLEVEL to set build unstable | *(leave blank)* | ⬜ Optional | Exit code that marks the build **unstable** (yellow) instead of failed. Blank means any non-zero exit code fails the build, which is what you want when tests fail. |
 
 ```bat
 call npm ci
@@ -637,21 +640,58 @@ call npm run test:headed
 | Line | Why |
 |---|---|
 | `call npm ci` | Installs the exact versions from `package-lock.json` into a clean `node_modules`. Needed every build, because new dev dependencies (e.g. `cross-env`) arrive through Git. |
-| `call npx playwright install` | Makes sure the browser builds match the installed Playwright version. Quick when they're already cached for this Windows user. |
-| `call npm run test:headed` | Runs all tests with visible, maximized windows. Use `test:headless` instead when nobody watches the run. |
+| `call npx playwright install` | Recommended. Makes sure the browser builds match the installed Playwright version; quick when they're already cached for this Windows user. Without it, a Playwright upgrade pushed to Git fails with "Executable doesn't exist". |
+| `call npm run test:headed` | Runs all tests with visible, maximized windows. Use `call npm run test:headless` instead when nobody watches the run. |
 | `call` on every line | `npm`/`npx` are `.cmd` files; without `call`, Windows ends the batch step after the first one. |
 
 **Post-build Actions → Publish HTML reports** (HTML Publisher plugin)
 
-| Field | Value | Status | Purpose |
+Field names below match the Jenkins 2.568 screen. Values marked ✏️ need changing from what's there now.
+
+| Field (as on screen) | Current value | Example value | Status | Purpose |
+|---|---|---|---|---|
+| HTML directory to archive | *(blank)* | ✏️ `playwright-report` | 🔶 Practically required | Folder, relative to the workspace, that Playwright writes its report to (set by the `html` reporter in `playwright.config.js`). Left blank, Jenkins copies the whole workspace, including `node_modules`. |
+| Index page[s] | `index.html` | `index.html` | ✅ Mandatory | Page opened when you click the report link. Playwright's report entry page is `index.html`. |
+| Index page title[s] (Optional) | *(blank)* | `Playwright Results` | ⬜ Optional | Tab label inside the report viewer when there are several index pages. With one page you can leave it blank. |
+| Report title | `HTML Report` | ✏️ `Playwright Report` | ⬜ Optional | Name of the link shown in the job's left-hand menu and on each build page. |
+
+**Publish HTML reports → Publishing options** (click the dropdown to show them)
+
+| Option | Example value | Status | Purpose |
 |---|---|---|---|
-| HTML directory to archive | `playwright-report` | ⚠️ Conditionally mandatory | Only the report folder. Left blank, Jenkins archives the whole workspace, including `node_modules`. |
-| Index page[s] | `index.html` | ⚠️ Conditionally mandatory | Entry page of the Playwright report. |
-| Report title | `Playwright Report` | ⬜ Optional | Link name on the job page. |
-| Keep past HTML reports | ✅ ticked | ⬜ Optional | Lets you compare runs. |
-| Allow missing report | ✅ ticked | ⬜ Optional | Avoids a second error when a build fails before tests run (e.g. checkout failure). |
+| Keep past HTML reports | ✅ ticked | ⬜ Optional (recommended) | Keeps a report per build, so you can open the report of an older run. Unticked, only the latest report survives. |
+| Always link to last build | ☐ unticked | ⬜ Optional | Ticked, the job page links to the report of the last build even if it failed. Unticked, it links to the last *successful* build's report. Tick it if you mostly need the report when tests fail. |
+| Allow missing report | ✅ ticked | ⬜ Optional (recommended) | Stops the publisher from adding its own error when no report exists, e.g. when the Git checkout failed before tests ran. |
+| Include files | `**/*` | ⬜ Optional | Which files inside the report folder to copy. Keep the default; Playwright's report needs its `data/` and `trace/` subfolders. |
+| Escape underscores in Report Title | ✅ ticked (default) | ⬜ Optional | Turns `_` in the title into a URL-safe form. Leave as is. |
+| Number of workers | `0` (default) | ⬜ Optional | Parallel copy threads. `0` copies on the build's own thread, fine for a small report. |
 
 > The Playwright HTML report uses JavaScript, which Jenkins's default Content Security Policy blocks, so it may open blank. Download the archived folder instead, or have an administrator relax the CSP for the HTML Publisher.
+
+**Post-build Actions → E-mail Notification** (built into Jenkins core)
+
+| Field (as on screen) | Example value | Status | Purpose |
+|---|---|---|---|
+| Recipients | `qa-team@example.com shivam@example.com` | ⚠️ Conditionally mandatory | Who gets the email. Separate addresses with spaces, not commas. Build parameters like `$NOTIFY_TO` also work. Leaving it blank means nobody is emailed. |
+| Send e-mail for every unstable build | ✅ ticked (default) | ⬜ Optional | Ticked: an email for every unstable build. Unticked: only the first unstable build after a stable one. |
+| Send separate e-mails to individuals who broke the build | ☐ unticked | ⬜ Optional | Also emails the authors of the commits in the failing build. Only useful when commit authors' emails match Jenkins users. |
+
+This action only sends mail when a build **fails**, becomes **unstable**, or **returns to stable**. A passing build after a passing build sends nothing.
+
+It also needs Jenkins to know how to send mail. Configure that once under **Manage Jenkins → System → E-mail Notification**:
+
+| Field | Example value (Gmail) | Status | Purpose |
+|---|---|---|---|
+| SMTP server | `smtp.gmail.com` | ✅ Mandatory for email | Mail server Jenkins sends through. |
+| Default user e-mail suffix | `@example.com` | ⬜ Optional | Turns Jenkins user names into addresses for "individuals who broke the build". |
+| Advanced → Use SMTP Authentication → User Name / Password | your address / an app password | ⚠️ Conditionally mandatory | Gmail and most providers require login. Use an app password, not your normal password. |
+| Advanced → Use SSL / Use TLS | TLS ticked | ⚠️ Conditionally mandatory | Encryption the server expects. |
+| Advanced → SMTP Port | `587` (TLS) or `465` (SSL) | ⚠️ Conditionally mandatory | Must match the encryption choice. |
+| Test configuration by sending test e-mail → Test e-mail recipient | your address | ⬜ Optional | Sends a test mail so you know SMTP works before a real build fails. |
+
+Also set **Manage Jenkins → System → Jenkins Location → System Admin e-mail address** (e.g. `jenkins@example.com`); it's the "From" address and many servers reject mail without one.
+
+> For HTML emails, attachments or sending on every build, use the **Editable Email Notification** action from the Email Extension plugin instead.
 
 ### 14.3 Save and Run
 
