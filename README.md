@@ -6,6 +6,7 @@ recovery, remote management, and the Playwright / Cucumber test CLIs.
 Commands assume **Windows `cmd`** unless marked otherwise. Examples use the
 repositories `ShivamPandit1213/PAIMANA_Dev` and `ShivamPandit1213/PAIMANA_PlaywrightMavenJavaSelenium`.
 
+---
 Command cheat sheet
 
 npm ci                               # install exact dependencies
