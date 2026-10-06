@@ -19,6 +19,7 @@ A step-by-step reference for creating each common Jenkins job type, showing **wh
 11. [Setting Up Credentials](#11-setting-up-credentials)
 12. [Cron Schedule Cheat Sheet](#12-cron-schedule-cheat-sheet)
 13. [Common Mistakes and Fixes](#13-common-mistakes-and-fixes)
+14. [Worked Example: Playwright Freestyle Job on Windows](#14-worked-example-playwright-freestyle-job-on-windows)
 
 ---
 
@@ -562,6 +563,153 @@ MINUTE  HOUR  DAY-OF-MONTH  MONTH  DAY-OF-WEEK
 | Disk fills up | Old builds and artifacts never deleted | Enable **Discard old builds** or `buildDiscarder` in the Jenkinsfile. |
 | `Scripts not permitted to use method...` | Groovy sandbox blocking a method | An administrator approves it under **Manage Jenkins → In-process Script Approval**, or rewrite the step. |
 | Job settings keep resetting | Jenkinsfile `options`/`parameters`/`triggers` overwrite UI settings | Make changes in the Jenkinsfile instead of the UI. |
+| `Failed to connect to github.com:443 ... Could not connect to server` | The Jenkins machine can't reach GitHub at all: network drop, VPN change, firewall/antivirus, or a proxy that `git.exe` doesn't know about. Not a credentials problem. | Run `Test-NetConnection github.com -Port 443` and `git ls-remote <repo-url>` on the same machine. If a proxy is needed, set `git config --global http.proxy http://HOST:PORT` (or `HTTPS_PROXY` in Jenkins global environment variables). Set **Retry Count** to survive short blips. See [Section 14.6](#146-troubleshooting). |
+| Only the first command in a Windows batch step runs | `npm` and `npx` are `.cmd` scripts; calling one without `call` ends the whole batch step | Prefix each line with `call`, e.g. `call npm ci`. |
+| Jenkins builds old code after you changed files locally | The job builds from the Git repository, not your local folder | Commit and push, then rebuild. |
+| HTML report archives the whole workspace | **Directory to archive** left blank in *Publish HTML reports* | Set it to the report folder, e.g. `playwright-report`. |
+| Browser windows are oversized or run off-screen in a headed Jenkins run | `CI` is set in the build environment, so the test config assumes headless sizes, while `--headed` forces windows open anyway | Switch headed mode through the project's own setting (e.g. `HEADLESS=false`), not the `--headed` flag. See [Section 14.4](#144-headed-vs-headless-runs). |
+| Headed browsers never appear / tests hang on Windows | Jenkins runs as a Windows service, which has no visible desktop | Run headless, or start Jenkins (or an agent) in a logged-in user session. |
+
+---
+
+## 14. Worked Example: Playwright Freestyle Job on Windows
+
+A real Freestyle job that runs a JavaScript Playwright project (`Paimana_Dev`) from GitHub on a local Windows Jenkins, with visible, maximized browser windows. It applies the field rules from [Section 5](#5-freestyle-project) to a concrete case and records the problems hit along the way.
+
+### 14.1 Setup Assumed
+
+| Item | Value in this example |
+|---|---|
+| Jenkins | Started with `java -jar jenkins.war` in the logged-in user's desktop session; `JENKINS_HOME` is `C:\Users\<user>\.jenkins` |
+| Repository | `https://github.com/<owner>/Paimana_Dev.git`, branch `master` |
+| Project | Node 24, `@playwright/test`, scripts `test:headed` and `test:headless` in `package.json` |
+| Agent tools | Node.js and Git installed and on `PATH` for the same Windows user |
+
+> The console line `Running as SYSTEM` refers to Jenkins's internal permission identity, not the Windows account. The build process runs as whichever Windows user started Jenkins.
+
+### 14.2 Field-by-Field Configuration
+
+**New Item**
+
+| Field | Value | Status | Purpose |
+|---|---|---|---|
+| Enter an item name | `Paimana_Dev` | ✅ Mandatory | Job name and workspace folder (`.jenkins\workspace\Paimana_Dev`). |
+| Item type | Freestyle project | ✅ Mandatory | UI-configured job, no Jenkinsfile needed. |
+
+**General**
+
+| Field | Value | Status | Purpose |
+|---|---|---|---|
+| Description | `Playwright UI + API tests for PAIMANA dev` | ⬜ Optional | Tells others what the job does. |
+| Discard old builds → Max # of builds to keep | `20` | ⬜ Optional (recommended) | Stops build logs and reports filling the disk. |
+| Advanced → Retry Count | `3` | ⬜ Optional (recommended) | Retries the Git checkout, so a brief network blip doesn't fail the build. |
+
+**Source Code Management**
+
+| Field | Value | Status | Purpose |
+|---|---|---|---|
+| SCM | Git | ⬜ Optional (needed here) | The tests live in GitHub. |
+| Repository URL | `https://github.com/<owner>/Paimana_Dev.git` | ⚠️ Conditionally mandatory | Where to fetch the code. |
+| Credentials | `github-shivam` (Username with password; password = GitHub personal access token) | ⚠️ Conditionally mandatory (private repo) | Authenticates the fetch. |
+| Branch Specifier | `*/master` | ⚠️ Conditionally mandatory | Must match the repo's real default branch (`master` here, not `main`). |
+
+**Build Triggers:** none, so the job runs only on **Build Now**. Add *Poll SCM* (`H/15 * * * *`) or *GitHub hook trigger* to run on every push.
+
+**Build Environment**
+
+| Field | Value | Status | Purpose |
+|---|---|---|---|
+| Add timestamps to the Console Output | ✅ ticked | ⬜ Optional | Shows how long each step takes. |
+| Terminate a build if it's stuck → Absolute, 30 minutes | ✅ ticked | ⬜ Optional | Kills a run where a browser hangs. |
+
+**Build Steps → Execute Windows batch command**
+
+| Field | Value | Status | Purpose |
+|---|---|---|---|
+| Command | see below | ⚠️ Conditionally mandatory | The actual work. |
+
+```bat
+call npm ci
+call npx playwright install
+call npm run test:headed
+```
+
+| Line | Why |
+|---|---|
+| `call npm ci` | Installs the exact versions from `package-lock.json` into a clean `node_modules`. Needed every build, because new dev dependencies (e.g. `cross-env`) arrive through Git. |
+| `call npx playwright install` | Makes sure the browser builds match the installed Playwright version. Quick when they're already cached for this Windows user. |
+| `call npm run test:headed` | Runs all tests with visible, maximized windows. Use `test:headless` instead when nobody watches the run. |
+| `call` on every line | `npm`/`npx` are `.cmd` files; without `call`, Windows ends the batch step after the first one. |
+
+**Post-build Actions → Publish HTML reports** (HTML Publisher plugin)
+
+| Field | Value | Status | Purpose |
+|---|---|---|---|
+| HTML directory to archive | `playwright-report` | ⚠️ Conditionally mandatory | Only the report folder. Left blank, Jenkins archives the whole workspace, including `node_modules`. |
+| Index page[s] | `index.html` | ⚠️ Conditionally mandatory | Entry page of the Playwright report. |
+| Report title | `Playwright Report` | ⬜ Optional | Link name on the job page. |
+| Keep past HTML reports | ✅ ticked | ⬜ Optional | Lets you compare runs. |
+| Allow missing report | ✅ ticked | ⬜ Optional | Avoids a second error when a build fails before tests run (e.g. checkout failure). |
+
+> The Playwright HTML report uses JavaScript, which Jenkins's default Content Security Policy blocks, so it may open blank. Download the archived folder instead, or have an administrator relax the CSP for the HTML Publisher.
+
+### 14.3 Save and Run
+
+1. Click **Save**, then **Build Now**.
+2. Open the build → **Console Output**. A good run checks out the commit, prints `Running 7 tests using N workers`, then `7 passed`.
+3. Open **Playwright Report** on the job page for screenshots and traces of any failure.
+
+### 14.4 Headed vs Headless Runs
+
+In this setup the build environment had `CI` set: the console showed `Running 7 tests using 1 worker`, while the same command on the desktop used 6 workers, and the project's config limits workers to 1 only when `CI` is set. The config also treated `CI` as "always headless" and gave every browser a fixed 1920×1080 page. The original build step, `npx playwright test --headed`, forced windows open anyway, so they kept the 1920×1080 size and ran off a 1920×1080 screen at 125% Windows scaling (only 1536×816 usable).
+
+| Approach | Result |
+|---|---|
+| `npx playwright test --headed` | ❌ Windows open, but the config doesn't know, so they keep the fixed headless size and aren't maximized. |
+| `npm run test:headed` (sets `HEADLESS=false`) | ✅ The config sees an explicit `HEADLESS=false`, which takes priority over `CI`, and maximizes every window to the real screen. |
+| `npm run test:headless` (sets `HEADLESS=true`) | ✅ No windows; fixed 1920×1080 page for repeatable results. |
+
+Two prerequisites for headed runs on a Windows Jenkins:
+
+- Jenkins (or the agent running the job) must run in a **logged-in desktop session**. A Jenkins installed as a Windows service runs where no desktop is visible, so use `test:headless` there.
+- The screen stays at whatever resolution and scaling the logged-in user has; the maximized windows adapt to it automatically.
+
+### 14.5 Getting Local Changes into Jenkins
+
+The job builds whatever is on GitHub, not the files on your disk. After changing the project:
+
+```powershell
+git add -A
+git commit -m "Describe the change"
+git push origin master
+```
+
+Then **Build Now**. The console's `Commit message:` line confirms which commit was built.
+
+### 14.6 Troubleshooting
+
+**Checkout fails with `Failed to connect to github.com:443 after 21136 ms: Could not connect to server`**
+
+The machine couldn't open a connection to GitHub. Bad credentials look different (`Authentication failed` or `403`). If an earlier build with the same settings fetched fine, something about the network changed.
+
+| Step | Command / action | What it tells you |
+|---|---|---|
+| 1. Test the connection | `Test-NetConnection github.com -Port 443` | `TcpTestSucceeded : True` means the network path is open. |
+| 2. Test git itself | `git ls-remote https://github.com/<owner>/Paimana_Dev.git` | Lists branches if git can reach and read the repo. If both work, the failure was temporary: rebuild. |
+| 3. Check GitHub | Open https://www.githubstatus.com | Rules out an outage. |
+| 4. Look for a proxy | `netsh winhttp show proxy` and the *ProxyServer* value under `HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings` | Browsers use the Windows proxy automatically; `git.exe` doesn't. |
+| 5. Tell git about the proxy | `git config --global http.proxy http://HOST:PORT` | Applies to Jenkins too when it runs under the same Windows user. Alternatively add `HTTPS_PROXY` under **Manage Jenkins → System → Global properties → Environment variables**. |
+| 6. VPN / firewall | Toggle the VPN; allow `git.exe` in the firewall/antivirus | Whichever state lets step 2 succeed is the one to build in. |
+
+> **Manage Jenkins → Plugins → Advanced → HTTP Proxy** only affects plugin downloads, not the `git` command used for checkout.
+
+**Other symptoms seen with this job**
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Firefox tests time out on `page.goto` | A third-party font never finishes loading, so Firefox's `load` event never fires | Navigate with `waitUntil: 'domcontentloaded'`; assertions still wait for their own elements. |
+| `Running N tests using 1 worker` in Jenkins but more locally | `CI` is set in the build environment | Expected; it also switches on retries. Use `test:headed`/`test:headless` to choose the window mode. |
+| `HEADLESS must be 'true' or 'false'` | A typo in the `HEADLESS` value | Use exactly `true` or `false`. |
 
 ---
 
