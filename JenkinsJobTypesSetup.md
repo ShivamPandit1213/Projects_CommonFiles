@@ -1,70 +1,584 @@
-# Jenkins Job Types Setup Guide
+# Jenkins Job Setup Guide: Playwright Freestyle Job, Step by Step
 
-A step-by-step reference for creating each common Jenkins job type, showing **which fields are mandatory**, which are optional, and **what each field is for**.
-
----
-
-## Table of Contents
-
-1. [How to Read This Guide](#1-how-to-read-this-guide)
-2. [Prerequisites](#2-prerequisites)
-3. [Choosing the Right Job Type](#3-choosing-the-right-job-type)
-4. [Common First Step: Creating a New Item](#4-common-first-step-creating-a-new-item)
-5. [Freestyle Project](#5-freestyle-project)
-6. [Pipeline](#6-pipeline)
-7. [Multibranch Pipeline](#7-multibranch-pipeline)
-8. [Organization Folder](#8-organization-folder)
-9. [Multi-configuration Project (Matrix)](#9-multi-configuration-project-matrix)
-10. [Folder](#10-folder)
-11. [Setting Up Credentials](#11-setting-up-credentials)
-12. [Cron Schedule Cheat Sheet](#12-cron-schedule-cheat-sheet)
-13. [Common Mistakes and Fixes](#13-common-mistakes-and-fixes)
-14. [Worked Example: Playwright Freestyle Job on Windows](#14-worked-example-playwright-freestyle-job-on-windows)
+Follow the steps in order, top to bottom. Each step says **where** to go in Jenkins, **what to enter** (with sample data), **why**, and **how to check** it worked. Reference material for the other Jenkins job types is in the appendices at the end.
 
 ---
 
-## 1. How to Read This Guide
+## Contents
 
-Jenkins itself enforces very few fields when you click **Save**. Usually only the item name is strictly required. However, many fields become mandatory the moment you enable a related option, and a job saved with nothing configured will run but do nothing useful. So each field below is marked with one of these labels:
+- [How to Read This Guide](#how-to-read-this-guide)
+- [Sample Data Used Throughout](#sample-data-used-throughout)
+- [Part A: One-Time Jenkins Setup](#part-a-one-time-jenkins-setup) (Steps 1–6)
+- [Part B: Prepare the Project](#part-b-prepare-the-project) (Steps 7–8)
+- [Part C: Create the Freestyle Job](#part-c-create-the-freestyle-job) (Steps 9–17): **Freestyle job, worked example**
+- [Part D: Run and Verify](#part-d-run-and-verify) (Steps 18–20)
+- [Part E: Troubleshooting](#part-e-troubleshooting)
+- [Appendix A: Choosing a Job Type](#appendix-a-choosing-a-job-type)
+- [Appendix B: Freestyle Project (All Fields)](#appendix-b-freestyle-project-all-fields)
+- [Appendix C: Pipeline](#appendix-c-pipeline)
+- [Appendix D: Multibranch Pipeline](#appendix-d-multibranch-pipeline)
+- [Appendix E: Organization Folder](#appendix-e-organization-folder)
+- [Appendix F: Multi-configuration Project (Matrix)](#appendix-f-multi-configuration-project-matrix)
+- [Appendix G: Folder](#appendix-g-folder)
+- [Appendix H: Cron Schedule Cheat Sheet](#appendix-h-cron-schedule-cheat-sheet)
+- [Appendix I: The Same Job as a Pipeline](#appendix-i-the-same-job-as-a-pipeline)
+
+---
+
+## How to Read This Guide
+
+Jenkins enforces very few fields when you click **Save**. Many fields become required only once you switch on a related option, and a job saved with nothing configured runs but does nothing useful. Each field is labelled:
 
 | Label | Meaning |
 |---|---|
-| ✅ **Mandatory** | Jenkins will not let you create or save the job without it. |
-| ⚠️ **Conditionally mandatory** | Required only once you enable the parent option (e.g. selecting *Git* makes *Repository URL* required). |
-| 🔶 **Practically required** | Jenkins lets you save without it, but the job will fail or do nothing. |
-| ⬜ **Optional** | Improves behaviour, safety or housekeeping, but not needed to run. |
+| ✅ **Mandatory** | Jenkins won't save, or the step can't work, without it. |
+| ⚠️ **Conditionally mandatory** | Required once you enable its parent option (e.g. ticking *Use SMTP Authentication* makes *User Name* required). |
+| 🔶 **Practically required** | Jenkins saves without it, but the job fails or does nothing useful. |
+| ⬜ **Optional** | Improves safety, speed or housekeeping. |
 
-> Field names match the default Jenkins UI (2.4xx+ LTS). Some labels vary slightly between versions and installed plugins.
+Field names match Jenkins **2.568** on Windows. Labels can differ slightly in other versions or with other plugins.
 
 ---
 
-## 2. Prerequisites
+## Sample Data Used Throughout
 
-Before creating jobs, make sure the required plugins are installed via **Manage Jenkins → Plugins**.
+Replace these with your own values. Everything else in the guide uses them.
 
-| Plugin | Needed for |
+| Item | Sample value |
 |---|---|
-| Git | Pulling code from Git repositories (all job types) |
-| Pipeline | Pipeline jobs and Jenkinsfile support |
-| Pipeline: Multibranch | Multibranch Pipeline jobs |
-| Branch API | Multibranch and Organization Folder jobs |
-| GitHub Branch Source / Bitbucket Branch Source / GitLab Branch Source | Multibranch and Organization Folder sources |
-| Matrix Project | Multi-configuration (Matrix) jobs |
-| Folders | Folder items |
-| Credentials Binding | Using secrets inside builds |
-| Timestamper | Timestamps in console output |
-| Workspace Cleanup | Deleting the workspace before/after builds |
-| JUnit | Publishing test reports |
-
-You also need:
-
-- At least one **agent** (or the built-in node) able to run builds.
-- **Credentials** for any private repository (see [Section 11](#11-setting-up-credentials)).
-- Build tools (JDK, Maven, Node.js, etc.) installed on the agent or configured in **Manage Jenkins → Tools**.
+| Jenkins URL | `http://localhost:8080/` |
+| Jenkins home folder | `C:\Users\shiva\.jenkins` |
+| Job name | `Paimana_Dev` |
+| GitHub repository | `https://github.com/<owner>/Paimana_Dev.git` |
+| Branch | `master` |
+| Credential ID | `github-shivam` |
+| Project stack | Node 24, `@playwright/test`, JavaScript |
+| Report folder | `playwright-report` |
+| Parallel workers | `4` |
+| Email recipients | `qa-team@example.com` |
+| Mail server | `smtp.gmail.com`, port `587`, TLS |
+| Portal under test | `https://iigdev.uatnegd.online` |
 
 ---
 
-## 3. Choosing the Right Job Type
+## Part A: One-Time Jenkins Setup
+
+Do these once per Jenkins installation. Every job after that reuses them.
+
+### Step 1: Check the Machine
+
+**Where:** a PowerShell window on the PC that runs Jenkins.
+
+```powershell
+java -version                                   # Java 21 for current Jenkins
+node -v                                         # v24.x for this project
+git --version                                   # any recent version
+Test-NetConnection github.com -Port 443         # TcpTestSucceeded : True
+```
+
+| Check | Expected | Why |
+|---|---|---|
+| `java -version` | `21.x` | Jenkins itself runs on Java. |
+| `node -v` | `v24.x` | The build step runs `npm`/`npx`; they must be on `PATH` for the Windows user that starts Jenkins. |
+| `git --version` | prints a version | The job checks code out with `git.exe`. |
+| `Test-NetConnection` | `TcpTestSucceeded : True` | Jenkins must reach GitHub, or checkout fails (see [Part E](#part-e-troubleshooting)). |
+
+### Step 2: Start Jenkins
+
+**Where:** PowerShell or Command Prompt, in the folder containing `jenkins.war`.
+
+```bat
+java -Dhudson.model.DirectoryBrowserSupport.CSP="" -jar jenkins.war
+```
+
+| Part | Sample value | Status | Why |
+|---|---|---|---|
+| `-Dhudson.model.DirectoryBrowserSupport.CSP=""` | empty | ⬜ Optional (needed for Playwright reports) | Jenkins normally blocks JavaScript in archived HTML. The Playwright report is a JavaScript app, so without this it shows a **blank page**. Fine for a personal Jenkins; on a shared one see [Part E → Report](#e4-report-problems). |
+| `-jar jenkins.war` | — | ✅ Mandatory | Starts Jenkins on port 8080. |
+
+**Run it in your logged-in desktop session**, not as a Windows service. Headed (visible) browser runs need a desktop; a Jenkins service has none and must run tests headless.
+
+> The console line `Running as SYSTEM` in build logs is Jenkins's internal permission identity, not the Windows account. Builds run as the Windows user who started Jenkins.
+
+**Check:** `http://localhost:8080/` opens the Jenkins dashboard.
+
+### Step 3: Install Plugins
+
+**Where:** **Manage Jenkins → Plugins → Available plugins**. Search, tick, then **Install**.
+
+| Plugin | Status | Gives you |
+|---|---|---|
+| Git | ✅ Mandatory | *Source Code Management → Git* |
+| HTML Publisher | ✅ Mandatory | *Post-build → Publish HTML reports* |
+| Mailer | 🔶 Practically required | *Post-build → E-mail Notification* and the SMTP settings |
+| Timestamper | ⬜ Optional | *Add timestamps to the Console Output* |
+| Build Timeout | ⬜ Optional | *Terminate a build if it's stuck* |
+| Workspace Cleanup | ⬜ Optional | *Delete workspace before build starts* |
+| Credentials Binding | ⬜ Optional | *Use secret text(s) or file(s)* |
+
+**Check:** **Installed plugins** lists them; restart Jenkins if asked.
+
+### Step 4: Add the GitHub Credential
+
+**Where:** **Manage Jenkins → Credentials → System → Global credentials (unrestricted) → Add Credentials**.
+
+First create a token on GitHub: **Settings → Developer settings → Personal access tokens**. A fine-grained token with **Contents: Read-only** on the repository is enough (or a classic token with the `repo` scope).
+
+| Field | Sample value | Status | Why |
+|---|---|---|---|
+| Kind | Username with password | ✅ Mandatory | GitHub over HTTPS uses a username + token. |
+| Scope | Global | ✅ Mandatory | *Global* = jobs can use it. *System* is only for Jenkins internals. |
+| Username | your GitHub username | ⚠️ Conditionally mandatory | Account that owns the token. |
+| Password | the personal access token | ⚠️ Conditionally mandatory | GitHub rejects your account password for Git; use the token. |
+| ID | `github-shivam` | ⬜ Optional (strongly recommended) | Stable name to pick in jobs. Left blank, Jenkins generates a random UUID. |
+| Description | `GitHub PAT for paimana repos` | ⬜ Optional | Shown in dropdowns and build logs. |
+
+**Check:** the credential appears in the list with ID `github-shivam`.
+
+### Step 5: Set Up Email
+
+Skip this step if you won't use e-mail notifications. If you add the E-mail Notification action without it, Jenkins tries a mail server on your own PC and every failed build ends with `Couldn't connect to host, port: localhost, 25`.
+
+**Where:** **Manage Jenkins → System**.
+
+**5a. Jenkins Location**
+
+| Field | Sample value | Status | Why |
+|---|---|---|---|
+| Jenkins URL | `http://localhost:8080/` | ✅ Mandatory | Used for links in emails. |
+| System Admin e-mail address | `jenkins@example.com` (or your Gmail address) | 🔶 Practically required | The "From" address. Many mail servers reject mail without one; Gmail requires it to match the login account. |
+
+**5b. E-mail Notification**
+
+| Field | Sample value | Status | Why |
+|---|---|---|---|
+| SMTP server | `smtp.gmail.com` | ✅ Mandatory | Mail server Jenkins sends through. Blank means `localhost`. |
+| Default user e-mail suffix | `@example.com` | ⬜ Optional | Turns Jenkins user names into addresses. |
+| Advanced → Use SMTP Authentication | ✅ ticked | ⚠️ Conditionally mandatory | Gmail requires login. |
+| ↳ User Name | `yourname@gmail.com` | ⚠️ Conditionally mandatory | The sending account. |
+| ↳ Password | 16-character app password | ⚠️ Conditionally mandatory | Gmail rejects your normal password. Create one at **Google Account → Security → App passwords**; that option only appears once **2-Step Verification** is on. |
+| Advanced → Use TLS | ✅ ticked | ⚠️ Conditionally mandatory | Encryption Gmail expects on port 587. |
+| Advanced → SMTP Port | `587` | ⚠️ Conditionally mandatory | `587` for TLS, `465` for SSL. |
+| Test configuration by sending test e-mail → Test e-mail recipient | `qa-team@example.com` | ⬜ Optional (recommended) | Click **Test configuration** to prove it works before a real build fails. |
+
+Click **Save**.
+
+**Check:** the test shows *Email was successfully sent* and the mail arrives.
+
+### Step 6: Allow the Report's JavaScript (if not done in Step 2)
+
+If you started Jenkins without the `-D...CSP=""` option, set it at runtime. It lasts until Jenkins restarts.
+
+**Where:** **Manage Jenkins → Script Console** (`http://localhost:8080/manage/script`).
+
+1. The **Console** box holds a sample line (`println(Jenkins.instance.pluginManager.plugins)`). Click inside, press **Ctrl+A**, then **Delete**.
+2. Paste and click **Run**:
+
+   ```groovy
+   System.setProperty("hudson.model.DirectoryBrowserSupport.CSP", "")
+   println("CSP is now: [" + System.getProperty("hudson.model.DirectoryBrowserSupport.CSP") + "]")
+   ```
+
+**Check:** the result reads `CSP is now: []`.
+
+---
+
+## Part B: Prepare the Project
+
+Jenkins builds whatever is in the Git repository, so the project must already handle running on Jenkins.
+
+### Step 7: Make the Project Jenkins-Ready
+
+**Where:** your project folder, e.g. `C:\Users\shiva\OneDrive\JavaSelenium\Paimana_Dev`.
+
+**7a. `package.json` scripts** (needs `cross-env` in devDependencies)
+
+```json
+"scripts": {
+  "test": "playwright test",
+  "test:headed": "cross-env HEADLESS=false playwright test",
+  "test:headless": "cross-env HEADLESS=true playwright test"
+}
+```
+
+| Script | Why |
+|---|---|
+| `test:headed` | Visible, maximized browser windows, even when Jenkins sets `CI`. Use this instead of Playwright's `--headed` flag (see below). |
+| `test:headless` | No windows; use when nobody watches the run or Jenkins runs as a service. |
+
+**7b. `playwright.config.js`: headless and workers switches**
+
+```js
+/** Headless or visible windows. Priority: HEADLESS env var > CI > visible. */
+function resolveHeadless() {
+  const value = process.env.HEADLESS?.trim().toLowerCase();
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  if (value) throw new Error(`HEADLESS must be 'true' or 'false', got '${process.env.HEADLESS}'`);
+  return !!process.env.CI;
+}
+
+/**
+ * Number of parallel workers. Priority: WORKERS env var > CI (1) > Playwright's default.
+ * WORKERS can be a whole number (4) or a percentage of CPU cores (50%).
+ */
+function resolveWorkers() {
+  const value = process.env.WORKERS?.trim();
+  if (!value) return process.env.CI ? 1 : undefined;
+  if (/^\d+%$/.test(value)) return value; // "50%" stays text
+  if (/^\d+$/.test(value)) return Number(value); // "4" becomes the number 4
+  throw new Error(
+    `WORKERS must be a number like 4 or a percentage like 50%, got '${process.env.WORKERS}'`,
+  );
+}
+
+export default defineConfig({
+  workers: resolveWorkers(),
+  retries: process.env.CI ? 2 : 0,
+  reporter: [['list'], ['html', { open: 'never' }]], // writes playwright-report/
+  use: { headless: resolveHeadless() /* ...rest unchanged */ },
+  // ...rest unchanged
+});
+```
+
+**Why these are needed on Jenkins**
+
+| Problem without it | Cause |
+|---|---|
+| Tests run one at a time on Jenkins (`Running 7 tests using 1 worker`) | Playwright's default template has `workers: process.env.CI ? 1 : undefined`, and the Jenkins build has `CI` set. |
+| `config.workers must be a number or percentage` | Environment variables are always text. Playwright accepts the number `4` or the text `"50%"`, but not the text `"4"`. `resolveWorkers()` converts it. |
+| Headed windows too big, running off the screen | With `CI` set the config assumed headless and used a fixed 1920×1080 page, while `--headed` forced windows open anyway. On a 1920×1080 screen at 125% scaling only 1536×816 is usable. `HEADLESS=false` tells the config, so it maximizes windows to the real screen. |
+
+**7c. Test locally, then push**
+
+```powershell
+npm ci
+npm run test:headless        # all tests should pass
+git add -A
+git commit -m "Make project Jenkins-ready"
+git push origin master
+```
+
+**Check:** the commit appears on GitHub.
+
+### Step 8: Know What the Build Will Run
+
+The job in Part C runs exactly this, in the Jenkins workspace (`C:\Users\shiva\.jenkins\workspace\Paimana_Dev`):
+
+```bat
+set WORKERS=4
+call npm ci
+call npx playwright install
+call npm run test:headed
+```
+
+| Line | Why |
+|---|---|
+| `set WORKERS=4` | Four tests run in parallel. Read by `resolveWorkers()`. |
+| `call npm ci` | Installs the exact versions from `package-lock.json`, including new ones pushed to Git (e.g. `cross-env`). |
+| `call npx playwright install` | Makes sure browser builds match the Playwright version. Quick when already cached. |
+| `call npm run test:headed` | Runs all tests in visible, maximized windows. |
+| `call` on each npm/npx line | `npm` and `npx` are `.cmd` files; without `call`, Windows ends the batch step after the first one. |
+
+**Batch-file rules that bite:** Jenkins saves the step as a `.bat` file.
+
+- A single `%` starts a variable name, so `set WORKERS=50%` arrives as `50`, which means **50 workers**. Write `set WORKERS=50%%` for half the CPU cores.
+- `set` keeps trailing spaces: `set WORKERS=4 ` stores `4 ` (the config's `.trim()` copes, but avoid it).
+
+---
+
+## Part C: Create the Freestyle Job
+
+This part creates a **Freestyle project**, the classic job type configured entirely through Jenkins's web form. Every field below uses the sample data; for the full list of Freestyle fields, including ones not used here, see [Appendix B](#appendix-b-freestyle-project-all-fields).
+
+### Step 9: Create the Job
+
+**Where:** Dashboard → **New Item**.
+
+| Field | Sample value | Status | Why |
+|---|---|---|---|
+| Enter an item name | `Paimana_Dev` | ✅ Mandatory | Job URL (`/job/Paimana_Dev/`) and workspace folder name. Avoid spaces. |
+| Item type | Freestyle project | ✅ Mandatory | UI-configured job, no Jenkinsfile. Can't be changed later. |
+| Copy from | *(blank)*, or an existing job | ⬜ Optional | Clones another job's settings. |
+
+Click **OK**. The configure page opens with sections **General, Source Code Management, Triggers, Environment, Build Steps, Post-build Actions** in the left menu.
+
+### Step 10: General
+
+| Field | Sample value | Status | Why |
+|---|---|---|---|
+| Description | `Playwright UI + API tests for PAIMANA dev` | ⬜ Optional | Explains the job to others. |
+| Discard old builds | ✅ ticked | ⬜ Optional (recommended) | Stops logs and reports filling the disk. |
+| ↳ Strategy → Max # of builds to keep | `20` | ⚠️ Conditionally mandatory (this or *Days to keep*) | Retention rule. |
+| This project is parameterized | ☐ unticked (see variant below) | ⬜ Optional | Asks for inputs when you start a build. |
+| Execute concurrent builds if necessary | ☐ unticked | ⬜ Optional | Two builds at once would fight over the same workspace and screen. |
+| Advanced → Retry Count | `3` | ⬜ Optional (recommended) | Retries the Git checkout after a brief network blip. |
+
+**Variant: choose headed/headless and workers per build.** Tick *This project is parameterized* and add:
+
+| Parameter | Name | Sample value | Why |
+|---|---|---|---|
+| Choice Parameter | `RUN_MODE` | Choices (one per line): `headed`, `headless` | First choice is the default. |
+| String Parameter | `WORKERS` | Default Value `4` | Becomes an environment variable automatically. |
+
+Then in Step 14 use `call npm run test:%RUN_MODE%` and drop the `set WORKERS=4` line. **Build Now** becomes **Build with Parameters**.
+
+### Step 11: Source Code Management
+
+| Field | Sample value | Status | Why |
+|---|---|---|---|
+| SCM | Git | 🔶 Practically required | The tests live in GitHub. |
+| Repository URL | `https://github.com/<owner>/Paimana_Dev.git` | ⚠️ Conditionally mandatory | Where to fetch the code. |
+| Credentials | `github-shivam` (from Step 4) | ⚠️ Conditionally mandatory (private repo) | Authenticates the fetch. |
+| Branches to build → Branch Specifier | `*/master` | ⚠️ Conditionally mandatory | Must match the real branch; the default `*/master` fails on repos that use `main`. |
+| Repository browser | (Auto) | ⬜ Optional | Links commits to GitHub's web UI. |
+| Additional Behaviours | *(none)* | ⬜ Optional | e.g. *Clean before checkout*. |
+
+**Check:** no red error appears under Repository URL after you pick the credential. A red *Failed to connect* message means Jenkins can't reach or log in to the repo.
+
+### Step 12: Triggers
+
+All optional. With none, the job runs only when you click **Build Now**.
+
+| Trigger | Sample value | Why |
+|---|---|---|
+| Poll SCM → Schedule | `H/15 * * * *` | Checks GitHub every ~15 minutes and builds only if there's a new commit. Works with a local Jenkins. |
+| Build periodically → Schedule | `H 2 * * 1-5` | Nightly run on weekdays around 2 AM, even without changes. |
+| GitHub hook trigger for GITScm polling | ☐ unticked | Needs GitHub to reach your Jenkins over the internet; `localhost` isn't reachable without a tunnel. |
+| Trigger builds remotely → Authentication Token | `paimana-run-7f3k` | Lets a script start the build via a URL. |
+
+Cron format: [Appendix H](#appendix-h-cron-schedule-cheat-sheet).
+
+### Step 13: Environment
+
+| Field | Sample value | Status | Why |
+|---|---|---|---|
+| Delete workspace before build starts | ☐ unticked | ⬜ Optional | Forces a full clone every build. `npm ci` already gives a clean `node_modules`. |
+| Use secret text(s) or file(s) | ☐ (later, for login tests) | ⬜ Optional | Injects secrets as masked environment variables. |
+| ↳ Bindings → Username and password (separated) | Username Variable `PAIMANA_USERNAME`, Password Variable `PAIMANA_PASSWORD`, Credentials: a stored portal login | ⚠️ Conditionally mandatory | How future login tests get credentials without putting them in Git. |
+| Add timestamps to the Console Output | ✅ ticked | ⬜ Optional | Shows which step is slow. |
+| Terminate a build if it's stuck | ✅ ticked | ⬜ Optional (recommended) | Stops a run where a browser hangs. |
+| ↳ Time-out strategy → Absolute → Timeout minutes | `30` | ⚠️ Conditionally mandatory | Limit for the whole build. |
+| ↳ Time-out actions | Abort the build | ⬜ Optional | Default action. |
+| With Ant | ☐ unticked | ⬜ Optional | Not used by Node projects. |
+
+### Step 14: Build Steps
+
+**Where:** **Add build step → Execute Windows batch command**.
+
+| Field | Sample value | Status | Why |
+|---|---|---|---|
+| Command | see block | ✅ Mandatory | The actual work. Without it the build "succeeds" with no tests run. |
+| Advanced → ERRORLEVEL to set build unstable | *(blank)* | ⬜ Optional | Blank: any non-zero exit code (failed tests) fails the build. |
+
+```bat
+set WORKERS=4
+call npm ci
+call npx playwright install
+call npm run test:headed
+```
+
+Line-by-line reasons are in [Step 8](#step-8-know-what-the-build-will-run).
+
+### Step 15: Post-build Action: Publish HTML Reports
+
+**Where:** **Add post-build action → Publish HTML reports → Add**.
+
+| Field | Sample value | Status | Why |
+|---|---|---|---|
+| HTML directory to archive | `playwright-report` | 🔶 Practically required | The folder Playwright's `html` reporter writes. Blank archives the whole workspace, including `node_modules`. |
+| Index page[s] | `index.html` | ✅ Mandatory | Page opened by the report link. |
+| Index page title[s] (Optional) | `Playwright Results` | ⬜ Optional | Tab label inside the report viewer. |
+| Report title | `Playwright Report` | ⬜ Optional | Link name in the job's left menu (`/job/Paimana_Dev/Playwright_20Report/`). |
+
+**Publishing options** (click the dropdown):
+
+| Option | Sample value | Status | Why |
+|---|---|---|---|
+| Keep past HTML reports | ✅ ticked | ⬜ Optional (recommended) | One report per build, so older runs stay viewable. |
+| Always link to last build | ☐ unticked | ⬜ Optional | Unticked: the job-level link shows the last *successful* build's report. Tick it to see failed runs' reports from the job page. |
+| Allow missing report | ✅ ticked | ⬜ Optional (recommended) | No extra error when tests never ran (e.g. checkout or config failure). |
+| Include files | `**/*` | ⬜ Optional | Keep the default; the report needs its `data/` and `trace/` subfolders. |
+| Escape underscores in Report Title | ✅ ticked (default) | ⬜ Optional | Leave as is. |
+| Number of workers | `0` (default) | ⬜ Optional | Copy threads; `0` is fine for small reports. |
+
+### Step 16: Post-build Action: E-mail Notification
+
+**Where:** **Add post-build action → E-mail Notification**. Needs [Step 5](#step-5-set-up-email).
+
+| Field | Sample value | Status | Why |
+|---|---|---|---|
+| Recipients | `qa-team@example.com you@example.com` | ⚠️ Conditionally mandatory | Space-separated, not commas. Blank means nobody gets mail. |
+| Send e-mail for every unstable build | ✅ ticked (default) | ⬜ Optional | Unticked: only the first unstable build in a row emails. |
+| Send separate e-mails to individuals who broke the build | ☐ unticked | ⬜ Optional | Also mails commit authors, but only those who are Jenkins users; others are skipped with `Not sending mail to unregistered user <address>`. |
+
+This action mails only when a build **fails**, becomes **unstable**, or **returns to stable**. Passing builds in a row send nothing.
+
+> For HTML emails, attachments or mail on every build, use **Editable Email Notification** (Email Extension plugin) instead.
+
+### Step 17: Save
+
+Click **Save** (or **Apply** to stay on the page).
+
+**Check:** the job page `http://localhost:8080/job/Paimana_Dev/` shows **Build Now**, **Workspace**, **Configure**, and (after the first build) **Playwright Report**.
+
+---
+
+## Part D: Run and Verify
+
+### Step 18: Run the First Build
+
+1. Click **Build Now** (or **Build with Parameters** → pick values → **Build**).
+2. Click the new build number (e.g. **#1**) → **Console Output**.
+
+**Sample of a good console log**, with what each part proves:
+
+```text
+Checking out Revision 471f068... (refs/remotes/origin/master)     ← Step 11 works
+Commit message: "Make project Jenkins-ready"                      ← latest push was built
+C:\Users\shiva\.jenkins\workspace\Paimana_Dev>set WORKERS=4       ← value arrived intact
+C:\Users\shiva\.jenkins\workspace\Paimana_Dev>call npm ci
+added 89 packages, and audited 90 packages in 12s
+> paimana-dev@1.0.0 test:headed
+> cross-env HEADLESS=false playwright test
+Running 7 tests using 4 workers                                   ← parallel, not 1 worker
+  7 passed (20.1s)
+[htmlpublisher] Archiving HTML reports...
+[htmlpublisher] Archiving at BUILD level ...\playwright-report    ← BUILD = Keep past reports on
+Finished: SUCCESS
+```
+
+Browser windows open maximized on the screen while the tests run.
+
+### Step 19: Open the Report
+
+1. On the job page (or a specific build's page), click **Playwright Report**.
+2. Press **Ctrl+F5** the first time.
+
+**Check:** the Playwright report lists all tests with pass/fail, durations and browsers. A bar with only **Back to Paimana_Dev**, **Playwright Results** and **Zip** and nothing below means Jenkins is blocking the report's JavaScript: do [Step 6](#step-6-allow-the-reports-javascript-if-not-done-in-step-2), then see [E.4](#e4-report-problems).
+
+### Step 20: Change the Tests Later
+
+Jenkins builds GitHub, not your local folder. After any change:
+
+```powershell
+npm run test:headless              # check locally first
+git add -A
+git commit -m "Describe the change"
+git push origin master
+```
+
+Then **Build Now**, or wait for Poll SCM. The console's `Commit message:` line confirms which commit was built.
+
+---
+
+## Part E: Troubleshooting
+
+**Read the console from the top and fix the first error.** One failure usually causes more errors further down. Example chain from a real build:
+
+1. `config.workers must be a number or percentage` → tests never start.
+2. `Build step 'Execute Windows batch command' marked build as failure`.
+3. `Specified HTML directory ... playwright-report does not exist` → no report, because no tests ran.
+4. `Couldn't connect to host, port: localhost, 25` → the failure email can't be sent (separate issue: Step 5 not done).
+
+Fixing 1 removes 2 and 3; 4 needs Step 5.
+
+### E.1 Checkout Problems
+
+| Console message | Cause | Fix |
+|---|---|---|
+| `Failed to connect to github.com:443 after 21136 ms: Could not connect to server` | The PC can't reach GitHub: network drop, VPN change, firewall, or a proxy `git.exe` doesn't know. Not a login problem. | See the steps below. |
+| `Authentication failed` / `403` | Wrong or expired token, or token lacks access to the repo | Update the credential's password with a new token (Step 4). |
+| `Couldn't find any revision to build` | Branch Specifier doesn't match (e.g. `*/master` on a `main` repo) | Fix Step 11. |
+
+**Steps for `Failed to connect`:**
+
+| # | Command / action | Meaning |
+|---|---|---|
+| 1 | `Test-NetConnection github.com -Port 443` | `True`: the network path is open. |
+| 2 | `git ls-remote https://github.com/<owner>/Paimana_Dev.git` | Lists branches: git works now, the failure was temporary. Rebuild. |
+| 3 | Open https://www.githubstatus.com | Rules out a GitHub outage. |
+| 4 | `netsh winhttp show proxy` | Browsers use the Windows proxy automatically; `git.exe` doesn't. |
+| 5 | `git config --global http.proxy http://HOST:PORT` | Applies to Jenkins too (same Windows user). Or set `HTTPS_PROXY` under **Manage Jenkins → System → Global properties → Environment variables**. |
+| 6 | Toggle VPN; allow `git.exe` in firewall/antivirus | Build in whichever state makes step 2 work. |
+
+> **Manage Jenkins → Plugins → Advanced → HTTP Proxy** only affects plugin downloads, not Git checkout. **Retry Count** (Step 10) rides out short blips.
+
+### E.2 Build Step Problems
+
+| Console message / symptom | Cause | Fix |
+|---|---|---|
+| Only `npm ci` runs, then the step ends | Missing `call` before `npm`/`npx` | Prefix each line with `call`. |
+| `'npm' is not recognized` | Node isn't on `PATH` for the Windows user running Jenkins | Install Node for that user or add it to `PATH`, then restart Jenkins. |
+| `Executable doesn't exist at ...ms-playwright...` | Browsers don't match the Playwright version | Add `call npx playwright install` (Step 14). |
+| `config.workers must be a number or percentage` | Config passes `WORKERS` text straight to Playwright | Use `resolveWorkers()` (Step 7b) and push. |
+| Console shows `set WORKERS=50` though you typed `50%` | `%` is special in `.bat` files | `set WORKERS=50%%`, or a whole number like `4`. |
+| `HEADLESS must be 'true' or 'false'` | Typo in `HEADLESS` | Use exactly `true` or `false`. |
+
+### E.3 Test Run Problems
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `Running 7 tests using 1 worker` | `CI` is set on Jenkins and the config's default is 1 worker | `set WORKERS=4` + `resolveWorkers()`, or `call npm run test:headed -- --workers=4` (the `--` passes the option through npm). |
+| Windows oversized / off-screen | `--headed` flag used while `CI` is set | Use `npm run test:headed` (`HEADLESS=false`), not `--headed`. |
+| Headed browsers never appear / tests hang | Jenkins runs as a Windows service (no desktop) | Use `test:headless`, or start Jenkins from your logged-in session (Step 2). |
+| Firefox times out on `page.goto` | A third-party font never finishes, so Firefox's `load` event never fires | Navigate with `waitUntil: 'domcontentloaded'`. |
+| Old code is tested | Changes weren't pushed | Step 20. |
+
+**Choosing a worker count**
+
+| Value | When |
+|---|---|
+| `1` | Tests share data that can't change at the same time (e.g. one test user). |
+| `2`–`4` | Jenkins on a desktop PC; browsers share CPU and memory with everything else. |
+| `50%%` (in a batch step) | A dedicated build machine. |
+
+### E.4 Report Problems
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Report link shows only *Back to …*, *Playwright Results*, *Zip* | Jenkins's Content Security Policy blocks the report's JavaScript | Step 2 (permanent) or Step 6 (until restart), then **Ctrl+F5**. No rebuild needed. |
+| `Specified HTML directory '...\playwright-report' does not exist` | Tests didn't run, so no report | Fix the first error; tick **Allow missing report**. |
+| Report shows an older run | Last build aborted/failed; the job-level link shows the last successful build | Open the specific build's **Playwright Report**, or tick *Always link to last build*. |
+| Whole workspace archived | *HTML directory to archive* blank | Set `playwright-report` (Step 15). |
+
+**Blocked or empty?** A Playwright report keeps its results inside `index.html`, so a blank page doesn't mean missing data.
+
+| Check | Result | Meaning |
+|---|---|---|
+| Blank report page → **F12 → Console** | Errors like *Refused to execute inline script because it violates the following Content Security Policy directive* | Data is there; CSP blocks it. |
+| Job page → **Workspace → playwright-report** | `index.html` of several hundred KB | Report written correctly. A `data` folder appears only when tests saved screenshots/traces. |
+| Same place | No folder or tiny `index.html` | Report not written: the run failed to start or was aborted. |
+| Build icon is a grey slash | Build aborted | Playwright writes the report only at the end of a run. |
+
+**Other ways to view it**
+
+- **Zip** (top right of the report page) → unzip → `npx playwright show-report <unzipped-folder>`.
+- On a shared Jenkins, instead of turning the CSP off, an administrator can set **Manage Jenkins → System → Serve resource files from another domain → Resource Root URL** (a second hostname for the same Jenkins). Check the Jenkins documentation on *Configuring Content Security Policy* first.
+
+> **Security trade-off:** with the CSP off, any HTML a build archives can run scripts while you're logged in. Acceptable on a personal Jenkins building only your own repositories.
+
+### E.5 Email Problems
+
+| Console message | Cause | Fix |
+|---|---|---|
+| `Couldn't connect to host, port: localhost, 25` | No SMTP server set | Step 5. |
+| `535 ... Username and Password not accepted` | Normal Gmail password used | Use an app password (Step 5b). |
+| `Not sending mail to unregistered user <address>` | *Send separate e-mails to individuals…* ticked; commit author isn't a Jenkins user | Harmless; untick the option if not needed. |
+| No email after a passing build | By design | Mail only on fail, unstable, or back to stable. |
+
+### E.6 Other Job Types
+
+| Problem | Cause | Fix |
+|---|---|---|
+| Multibranch shows no branches | No Jenkinsfile at Script Path, or a branch filter excludes them | Check the **Scan Multibranch Pipeline Log**. |
+| Pipeline job settings keep resetting | Jenkinsfile `options`/`parameters`/`triggers` overwrite UI settings after each run | Change them in the Jenkinsfile. |
+| `Scripts not permitted to use method...` | Groovy sandbox blocks a method | Approve under **Manage Jenkins → In-process Script Approval**, or rewrite the step. |
+| Job never runs automatically | No trigger, or webhook can't reach Jenkins | Use Poll SCM for a local Jenkins. |
+
+---
+
+## Appendix A: Choosing a Job Type
 
 | Job Type | Best for | Configuration lives in |
 |---|---|---|
@@ -79,36 +593,15 @@ You also need:
 
 ---
 
-## 4. Common First Step: Creating a New Item
+## Appendix B: Freestyle Project (All Fields)
 
-Every job type starts the same way.
-
-**Step 1.** From the Jenkins dashboard, click **New Item** (top-left).
-
-**Step 2.** Fill in the item name.
-
-| Field | Status | Purpose |
-|---|---|---|
-| Enter an item name | ✅ Mandatory | Unique identifier for the job. Becomes part of the job URL and workspace path. Avoid spaces and special characters (use `my-app-build`, not `My App Build!`). |
-
-**Step 3.** Select the job type.
-
-| Field | Status | Purpose |
-|---|---|---|
-| Item type (Freestyle, Pipeline, etc.) | ✅ Mandatory | Decides which configuration screen and behaviour the job gets. Cannot be changed later; you would need to recreate the job. |
-| Copy from | ⬜ Optional | Clones the configuration of an existing job, saving setup time for similar jobs. |
-
-**Step 4.** Click **OK** to open the configuration page.
-
----
-
-## 5. Freestyle Project
+> For a complete worked example with sample values (Playwright on Windows), follow [Part C](#part-c-create-the-freestyle-job). This appendix lists **every** common Freestyle field, including ones that example doesn't use (Maven/Gradle steps, artifacts, JUnit, downstream jobs).
 
 **What it is:** The classic, UI-driven job type. You configure source code, triggers, build steps and post-build actions through form fields.
 
 **Use when:** You need a quick, simple job such as running a shell script, a scheduled cleanup, or a one-step deployment.
 
-### Step 1 — General
+### 1. General
 
 | Field | Status | Purpose |
 |---|---|---|
@@ -132,7 +625,7 @@ Every job type starts the same way.
 | Block build when upstream project is building | ⬜ Optional | Prevents running against half-built dependencies. |
 | Use custom workspace → Directory | ⚠️ Conditionally mandatory | Overrides the default workspace path. |
 
-### Step 2 — Source Code Management
+### 2. Source Code Management
 
 | Field | Status | Purpose |
 |---|---|---|
@@ -143,7 +636,7 @@ Every job type starts the same way.
 | ↳ Repository browser | ⬜ Optional | Adds links from Jenkins changes to your Git web UI. |
 | ↳ Additional Behaviours | ⬜ Optional | Extras like *Clean before checkout*, *Shallow clone*, *Checkout to a sub-directory*. |
 
-### Step 3 — Build Triggers
+### 3. Build Triggers
 
 All triggers are optional; without any, the job only runs when started manually.
 
@@ -155,12 +648,12 @@ All triggers are optional; without any, the job only runs when started manually.
 | ↳ Projects to watch | ⚠️ Conditionally mandatory | Names of the upstream jobs. |
 | ↳ Trigger only if build is stable / unstable / fails | ⬜ Optional | Controls which upstream result starts this job. |
 | Build periodically | ⬜ Optional | Runs on a fixed schedule (nightly builds, cleanups). |
-| ↳ Schedule | ⚠️ Conditionally mandatory | Cron expression, e.g. `H 2 * * *` (see [Section 12](#12-cron-schedule-cheat-sheet)). |
+| ↳ Schedule | ⚠️ Conditionally mandatory | Cron expression, e.g. `H 2 * * *` (see [Appendix H](#appendix-h-cron-schedule-cheat-sheet)). |
 | GitHub hook trigger for GITScm polling | ⬜ Optional | Builds immediately when GitHub sends a webhook. Requires a webhook configured in GitHub. |
 | Poll SCM | ⬜ Optional | Jenkins checks the repo for changes on a schedule and builds only if something changed. |
 | ↳ Schedule | ⚠️ Conditionally mandatory | Cron expression for how often to poll, e.g. `H/5 * * * *`. |
 
-### Step 4 — Build Environment
+### 4. Build Environment
 
 | Field | Status | Purpose |
 |---|---|---|
@@ -171,7 +664,7 @@ All triggers are optional; without any, the job only runs when started manually.
 | Terminate a build if it's stuck | ⬜ Optional | Aborts builds that hang beyond a time limit. |
 | ↳ Time-out strategy + Timeout minutes | ⚠️ Conditionally mandatory | Defines when a build is considered stuck. |
 
-### Step 5 — Build Steps
+### 5. Build Steps
 
 | Field | Status | Purpose |
 |---|---|---|
@@ -189,7 +682,7 @@ npm test
 npm run build
 ```
 
-### Step 6 — Post-build Actions
+### 6. Post-build Actions
 
 | Field | Status | Purpose |
 |---|---|---|
@@ -202,7 +695,7 @@ npm run build
 | E-mail Notification | ⬜ Optional | Emails people when builds fail or recover. |
 | ↳ Recipients | ⚠️ Conditionally mandatory | Space-separated email addresses. |
 
-### Step 7 — Save and Test
+### 7. Save and Test
 
 1. Click **Save**.
 2. Click **Build Now** (or **Build with Parameters** if parameterized).
@@ -210,15 +703,15 @@ npm run build
 
 ---
 
-## 6. Pipeline
+## Appendix C: Pipeline
 
 **What it is:** A job whose entire process (checkout, build, test, deploy) is defined in code using a **Jenkinsfile** written in Groovy-based Pipeline syntax.
 
 **Use when:** You need multi-stage CI/CD for a single branch and want the build logic version-controlled.
 
-### Step 1 — General
+### 1. General
 
-Same options as Freestyle (Description, Discard old builds, Parameterized, Disable, concurrent builds). All ⬜ Optional. Pipeline-specific additions:
+Same options as the Freestyle job (Step 10) (Description, Discard old builds, Parameterized, Disable, concurrent builds). All ⬜ Optional. Pipeline-specific additions:
 
 | Field | Status | Purpose |
 |---|---|---|
@@ -227,11 +720,11 @@ Same options as Freestyle (Description, Discard old builds, Parameterized, Disab
 
 > Most General settings can instead be declared inside the Jenkinsfile (`options {}`, `parameters {}`, `triggers {}`). Settings in the Jenkinsfile overwrite the UI after the first run.
 
-### Step 2 — Build Triggers
+### 2. Build Triggers
 
-Same as Freestyle: *Build periodically*, *Poll SCM*, *GitHub hook trigger*, *Trigger builds remotely*, *Build after other projects*. All ⬜ Optional, with the same conditionally mandatory sub-fields (Schedule, Token, Projects to watch).
+Same as the Freestyle job (Step 12): *Build periodically*, *Poll SCM*, *GitHub hook trigger*, *Trigger builds remotely*, *Build after other projects*. All ⬜ Optional, with the same conditionally mandatory sub-fields (Schedule, Token, Projects to watch).
 
-### Step 3 — Pipeline Definition (the core section)
+### 3. Pipeline Definition (the core section)
 
 | Field | Status | Purpose |
 |---|---|---|
@@ -256,7 +749,7 @@ Same as Freestyle: *Build periodically*, *Poll SCM*, *GitHub hook trigger*, *Tri
 | Script Path | ⚠️ Conditionally mandatory | Path to the Jenkinsfile in the repo. Default `Jenkinsfile`; change if it lives elsewhere (e.g. `ci/Jenkinsfile`). |
 | Lightweight checkout | ⬜ Optional | Reads only the Jenkinsfile instead of cloning the whole repo first. Faster; leave enabled. |
 
-### Step 4 — Sample Jenkinsfile
+### 4. Sample Jenkinsfile
 
 ```groovy
 pipeline {
@@ -294,19 +787,19 @@ pipeline {
 | `steps {}` inside each stage | ✅ Mandatory | Commands executed in that stage. |
 | `options`, `environment`, `parameters`, `triggers`, `post` | ⬜ Optional | Settings, variables, inputs, schedules and cleanup/notification actions. |
 
-### Step 5 — Save and Test
+### 5. Save and Test
 
 Click **Save** → **Build Now**. The **Stage View** on the job page shows each stage's status and duration.
 
 ---
 
-## 7. Multibranch Pipeline
+## Appendix D: Multibranch Pipeline
 
 **What it is:** A container job that scans a repository, finds every branch (and optionally pull request) containing a Jenkinsfile, and automatically creates a Pipeline job for each one.
 
 **Use when:** Your team works with feature branches and pull requests and you want each one built automatically.
 
-### Step 1 — General
+### 1. General
 
 | Field | Status | Purpose |
 |---|---|---|
@@ -314,7 +807,7 @@ Click **Save** → **Build Now**. The **Stage View** on the job page shows each 
 | Description | ⬜ Optional | Explains the project. |
 | Disable | ⬜ Optional | Pauses scanning and building of all branches. |
 
-### Step 2 — Branch Sources
+### 2. Branch Sources
 
 | Field | Status | Purpose |
 |---|---|---|
@@ -340,14 +833,14 @@ Click **Save** → **Build Now**. The **Stage View** on the job page shows each 
 | Credentials | ⚠️ Conditionally mandatory (private repos) | Repository access. |
 | Behaviours | ⬜ Optional | Discover branches / tags, filter by name, etc. |
 
-### Step 3 — Build Configuration
+### 3. Build Configuration
 
 | Field | Status | Purpose |
 |---|---|---|
 | Mode | ✅ Mandatory (default: *by Jenkinsfile*) | How each branch's pipeline is defined. |
 | Script Path | ✅ Mandatory (default: `Jenkinsfile`) | Path of the Jenkinsfile in each branch. Only branches containing this file become jobs. |
 
-### Step 4 — Scan Multibranch Pipeline Triggers
+### 4. Scan Multibranch Pipeline Triggers
 
 | Field | Status | Purpose |
 |---|---|---|
@@ -356,14 +849,14 @@ Click **Save** → **Build Now**. The **Stage View** on the job page shows each 
 
 > With webhooks configured, new commits trigger builds instantly. The periodic scan is a safety net.
 
-### Step 5 — Orphaned Item Strategy
+### 5. Orphaned Item Strategy
 
 | Field | Status | Purpose |
 |---|---|---|
 | Discard old items | ⬜ Optional (enabled by default) | Removes jobs for branches deleted from the repo. |
 | ↳ Days to keep old items / Max # of old items to keep | ⬜ Optional | How long jobs for deleted branches remain. Blank means delete immediately. |
 
-### Step 6 — Other Sections
+### 6. Other Sections
 
 | Field | Status | Purpose |
 |---|---|---|
@@ -371,25 +864,25 @@ Click **Save** → **Build Now**. The **Stage View** on the job page shows each 
 | Health metrics | ⬜ Optional | Controls how the folder's weather icon is calculated. |
 | Properties → Pipeline Libraries | ⬜ Optional | Shared libraries available to all branches. |
 
-### Step 7 — Save
+### 7. Save
 
 Clicking **Save** automatically runs **Scan Multibranch Pipeline Now**. Check **Scan Multibranch Pipeline Log** to confirm which branches were found and which were skipped (and why).
 
 ---
 
-## 8. Organization Folder
+## Appendix E: Organization Folder
 
 **What it is:** Scans an entire GitHub organization, Bitbucket team/project, or GitLab group, and creates a Multibranch Pipeline for every repository that contains a Jenkinsfile.
 
 **Use when:** You want every repo in an organization onboarded to CI automatically, without creating jobs one by one.
 
-### Step 1 — General
+### 1. General
 
 | Field | Status | Purpose |
 |---|---|---|
 | Display Name / Description | ⬜ Optional | Friendly name and explanation. |
 
-### Step 2 — Projects (Repository Sources)
+### 2. Projects (Repository Sources)
 
 | Field | Status | Purpose |
 |---|---|---|
@@ -405,20 +898,20 @@ Clicking **Save** automatically runs **Scan Multibranch Pipeline Now**. Check **
 | Behaviours → Discover branches / pull requests | ⬜ Optional (added by default) | Same purpose as in Multibranch. |
 | Behaviours → Filter by name (with regular expression / wildcards) | ⬜ Optional | Limit which repositories are included. |
 
-### Step 3 — Project Recognizers
+### 3. Project Recognizers
 
 | Field | Status | Purpose |
 |---|---|---|
 | Pipeline Jenkinsfile | ✅ Mandatory (default) | Decides which repos become jobs: only those containing the Jenkinsfile. |
 | ↳ Script Path | ✅ Mandatory (default `Jenkinsfile`) | Expected location of the Jenkinsfile in each repo. |
 
-### Step 4 — Scan Organization Triggers
+### 4. Scan Organization Triggers
 
 | Field | Status | Purpose |
 |---|---|---|
 | Periodically if not otherwise run → Interval | ⬜ Optional (recommended) | Rescans the organization to find new or removed repos. |
 
-### Step 5 — Orphaned Item Strategy & Child Strategies
+### 5. Orphaned Item Strategy & Child Strategies
 
 | Field | Status | Purpose |
 |---|---|---|
@@ -426,13 +919,13 @@ Clicking **Save** automatically runs **Scan Multibranch Pipeline Now**. Check **
 | Child Orphaned Item Strategy | ⬜ Optional | Removes jobs for deleted branches inside each repo. |
 | Automatic branch project triggering → Branch names to build automatically | ⬜ Optional | Regex for which branches build automatically after scanning (default `.*` = all). |
 
-### Step 6 — Save
+### 6. Save
 
 Save triggers an organization scan. Review **Scan Organization Log** to see which repos were recognised.
 
 ---
 
-## 9. Multi-configuration Project (Matrix)
+## Appendix F: Multi-configuration Project (Matrix)
 
 **What it is:** A UI-configured job that runs the same build steps across every combination of defined variables ("axes"), e.g. 3 JDK versions × 2 operating systems = 6 builds.
 
@@ -440,11 +933,11 @@ Save triggers an organization scan. Review **Scan Organization Log** to see whic
 
 **Requires:** Matrix Project plugin.
 
-### Step 1 — General, Source Code Management, Build Triggers, Build Environment
+### 1. General, Source Code Management, Build Triggers, Build Environment
 
-Same fields and rules as [Freestyle](#5-freestyle-project).
+Same fields and rules as [Part C](#part-c-create-the-freestyle-job).
 
-### Step 2 — Configuration Matrix (the core section)
+### 2. Configuration Matrix (the core section)
 
 | Field | Status | Purpose |
 |---|---|---|
@@ -457,7 +950,7 @@ Same fields and rules as [Freestyle](#5-freestyle-project).
 | Run each configuration sequentially | ⬜ Optional | Runs combinations one after another instead of in parallel (saves resources). |
 | Execution Strategy → Touchstone builds | ⬜ Optional | Runs a subset first; if it fails, the remaining combinations are skipped. |
 
-### Step 3 — Build Steps
+### 3. Build Steps
 
 | Field | Status | Purpose |
 |---|---|---|
@@ -470,23 +963,23 @@ echo "Testing on $BROWSER with Java $JDK_VERSION"
 mvn test -Dbrowser=$BROWSER
 ```
 
-### Step 4 — Post-build Actions
+### 4. Post-build Actions
 
-Same as Freestyle. Test reports are aggregated across all combinations on the parent job page.
+Same as the Freestyle job (Steps 15–16). Test reports are aggregated across all combinations on the parent job page.
 
-### Step 5 — Save and Test
+### 5. Save and Test
 
 Click **Build Now**. The job page shows a grid with the result of each combination.
 
 ---
 
-## 10. Folder
+## Appendix G: Folder
 
 **What it is:** A container used to organize jobs into groups, similar to a directory. It does not build anything itself.
 
 **Use when:** You have many jobs and want to group them by team, product or environment, or restrict credentials and permissions to a subset of jobs.
 
-### Step 1 — Configuration
+### 1. Configuration
 
 | Field | Status | Purpose |
 |---|---|---|
@@ -495,41 +988,18 @@ Click **Build Now**. The job page shows a grid with the result of each combinati
 | Health metrics | ⬜ Optional | How the folder's weather icon summarizes its jobs. |
 | Properties → Pipeline Libraries | ⬜ Optional | Shared libraries available only to jobs inside this folder. |
 
-### Step 2 — Folder-scoped Credentials (after saving)
+### 2. Folder-scoped Credentials (after saving)
 
 1. Open the folder → **Credentials** → **Folder** store → **Global credentials** → **Add Credentials**.
 2. Credentials added here are visible only to jobs inside this folder, which is safer than global credentials.
 
-### Step 3 — Add Jobs
+### 3. Add Jobs
 
 Open the folder and click **New Item**; jobs created there live inside it. Existing jobs can be moved via the job's **Move** option.
 
 ---
 
-## 11. Setting Up Credentials
-
-Most private-repository and deployment jobs need credentials. Add them via **Manage Jenkins → Credentials → System → Global credentials → Add Credentials** (or in a folder's credential store).
-
-| Field | Status | Purpose |
-|---|---|---|
-| Kind | ✅ Mandatory | Type of secret: *Username with password*, *SSH Username with private key*, *Secret text*, *Secret file*, *Certificate*, or *GitHub App*. |
-| Scope | ✅ Mandatory | **Global** = usable by jobs; **System** = only Jenkins internals (e.g. agent connections). Choose Global for job credentials. |
-| Username | ⚠️ Conditionally mandatory | For username/password and SSH key kinds. |
-| Password / Secret / Private Key | ⚠️ Conditionally mandatory | The secret itself. For GitHub, use a personal access token as the password. |
-| ID | ⬜ Optional (strongly recommended) | Stable name used in Jenkinsfiles, e.g. `github-token`. If blank, Jenkins generates a random UUID that is hard to reference. |
-| Description | ⬜ Optional | Helps identify the credential in dropdowns. |
-
-Using a credential in a Jenkinsfile:
-
-```groovy
-withCredentials([string(credentialsId: 'api-token', variable: 'TOKEN')]) {
-    sh 'curl -H "Authorization: Bearer $TOKEN" https://api.example.com/deploy'
-}
-```
-
----
-
-## 12. Cron Schedule Cheat Sheet
+## Appendix H: Cron Schedule Cheat Sheet
 
 Used by **Build periodically**, **Poll SCM** and the `triggers {}` block. Format:
 
@@ -551,368 +1021,70 @@ MINUTE  HOUR  DAY-OF-MONTH  MONTH  DAY-OF-WEEK
 
 ---
 
-## 13. Common Mistakes and Fixes
-
-| Problem | Likely cause | Fix |
-|---|---|---|
-| `Couldn't find any revision to build` | Branch Specifier is `*/master` but repo uses `main` | Change Branch Specifier to `*/main`. |
-| `Permission denied` / `Authentication failed` on checkout | Missing or wrong credentials | Add credentials and select them in the SCM section. |
-| Multibranch shows no branches | No Jenkinsfile at Script Path, or branch filter excludes them | Check the **Scan Log**; verify Script Path and Behaviours filters. |
-| Build succeeds but does nothing | Freestyle job with no build steps | Add at least one build step. |
-| Job never runs automatically | No trigger configured, or webhook not set up | Add a trigger, or configure the webhook in GitHub/GitLab to `https://<jenkins>/github-webhook/`. |
-| Disk fills up | Old builds and artifacts never deleted | Enable **Discard old builds** or `buildDiscarder` in the Jenkinsfile. |
-| `Scripts not permitted to use method...` | Groovy sandbox blocking a method | An administrator approves it under **Manage Jenkins → In-process Script Approval**, or rewrite the step. |
-| Job settings keep resetting | Jenkinsfile `options`/`parameters`/`triggers` overwrite UI settings | Make changes in the Jenkinsfile instead of the UI. |
-| `Failed to connect to github.com:443 ... Could not connect to server` | The Jenkins machine can't reach GitHub at all: network drop, VPN change, firewall/antivirus, or a proxy that `git.exe` doesn't know about. Not a credentials problem. | Run `Test-NetConnection github.com -Port 443` and `git ls-remote <repo-url>` on the same machine. If a proxy is needed, set `git config --global http.proxy http://HOST:PORT` (or `HTTPS_PROXY` in Jenkins global environment variables). Set **Retry Count** to survive short blips. See [Section 14.6](#146-troubleshooting). |
-| Only the first command in a Windows batch step runs | `npm` and `npx` are `.cmd` scripts; calling one without `call` ends the whole batch step | Prefix each line with `call`, e.g. `call npm ci`. |
-| Jenkins builds old code after you changed files locally | The job builds from the Git repository, not your local folder | Commit and push, then rebuild. |
-| HTML report archives the whole workspace | **Directory to archive** left blank in *Publish HTML reports* | Set it to the report folder, e.g. `playwright-report`. |
-| Browser windows are oversized or run off-screen in a headed Jenkins run | `CI` is set in the build environment, so the test config assumes headless sizes, while `--headed` forces windows open anyway | Switch headed mode through the project's own setting (e.g. `HEADLESS=false`), not the `--headed` flag. See [Section 14.4](#144-headed-vs-headless-runs). |
-| Headed browsers never appear / tests hang on Windows | Jenkins runs as a Windows service, which has no visible desktop | Run headless, or start Jenkins (or an agent) in a logged-in user session. |
-| Published HTML report (Playwright, Cypress, Allure, etc.) shows a blank page | Jenkins serves archived files with a strict Content Security Policy that blocks JavaScript and inline styles | Relax the CSP for a local Jenkins, or download the report with **Zip**. See [Section 14.7](#147-viewing-the-playwright-report-in-jenkins). |
-| Tests run one at a time on Jenkins but in parallel locally | The test config limits workers when `CI` is set (Playwright's default template does this) | Set the worker count explicitly in the build step, e.g. `--workers=4`. See [Section 14.8](#148-running-tests-in-parallel-on-jenkins). |
-| A `%` value in a Windows batch step arrives wrong (e.g. `50%` becomes `50`) | Jenkins saves the step as a `.bat` file, where `%` starts a variable | Write `%%` for a literal percent sign: `set WORKERS=50%%`. |
-| E-mail Notification fails with `Couldn't connect to host, port: localhost, 25` | Jenkins has no SMTP server set, so it tries the local PC | Configure **Manage Jenkins → System → E-mail Notification** (e.g. `smtp.gmail.com`, port 587, TLS, app password). |
-
----
-
-## 14. Worked Example: Playwright Freestyle Job on Windows
-
-A real Freestyle job that runs a JavaScript Playwright project (`Paimana_Dev`) from GitHub on a local Windows Jenkins, with visible, maximized browser windows. It applies the field rules from [Section 5](#5-freestyle-project) to a concrete case and records the problems hit along the way.
-
-### 14.1 Setup Assumed
-
-| Item | Value in this example |
-|---|---|
-| Jenkins | Started with `java -jar jenkins.war` in the logged-in user's desktop session; `JENKINS_HOME` is `C:\Users\<user>\.jenkins` |
-| Repository | `https://github.com/<owner>/Paimana_Dev.git`, branch `master` |
-| Project | Node 24, `@playwright/test`, scripts `test:headed` and `test:headless` in `package.json` |
-| Agent tools | Node.js and Git installed and on `PATH` for the same Windows user |
-
-> The console line `Running as SYSTEM` refers to Jenkins's internal permission identity, not the Windows account. The build process runs as whichever Windows user started Jenkins.
-
-### 14.2 Field-by-Field Configuration
-
-**New Item**
-
-| Field | Value | Status | Purpose |
-|---|---|---|---|
-| Enter an item name | `Paimana_Dev` | ✅ Mandatory | Job name and workspace folder (`.jenkins\workspace\Paimana_Dev`). |
-| Item type | Freestyle project | ✅ Mandatory | UI-configured job, no Jenkinsfile needed. |
-
-**General**
-
-| Field | Value | Status | Purpose |
-|---|---|---|---|
-| Description | `Playwright UI + API tests for PAIMANA dev` | ⬜ Optional | Tells others what the job does. |
-| Discard old builds → Max # of builds to keep | `20` | ⬜ Optional (recommended) | Stops build logs and reports filling the disk. |
-| Advanced → Retry Count | `3` | ⬜ Optional (recommended) | Retries the Git checkout, so a brief network blip doesn't fail the build. |
-
-**Source Code Management**
-
-| Field | Value | Status | Purpose |
-|---|---|---|---|
-| SCM | Git | ⬜ Optional (needed here) | The tests live in GitHub. |
-| Repository URL | `https://github.com/<owner>/Paimana_Dev.git` | ⚠️ Conditionally mandatory | Where to fetch the code. |
-| Credentials | `github-shivam` (Username with password; password = GitHub personal access token) | ⚠️ Conditionally mandatory (private repo) | Authenticates the fetch. |
-| Branch Specifier | `*/master` | ⚠️ Conditionally mandatory | Must match the repo's real default branch (`master` here, not `main`). |
-
-**Build Triggers:** none, so the job runs only on **Build Now**. Add *Poll SCM* (`H/15 * * * *`) or *GitHub hook trigger* to run on every push.
-
-**Build Environment**
-
-| Field | Value | Status | Purpose |
-|---|---|---|---|
-| Add timestamps to the Console Output | ✅ ticked | ⬜ Optional | Shows how long each step takes. |
-| Terminate a build if it's stuck → Absolute, 30 minutes | ✅ ticked | ⬜ Optional | Kills a run where a browser hangs. |
-
-**Build Steps → Execute Windows batch command**
-
-Your screen currently has the first and last of these lines; the middle one is recommended.
-
-| Field (as on screen) | Example value | Status | Purpose |
-|---|---|---|---|
-| Command | see block below | ⚠️ Conditionally mandatory | The actual work of the job. Without it, the build "succeeds" but runs no tests. |
-| Advanced → ERRORLEVEL to set build unstable | *(leave blank)* | ⬜ Optional | Exit code that marks the build **unstable** (yellow) instead of failed. Blank means any non-zero exit code fails the build, which is what you want when tests fail. |
-
-```bat
-call npm ci
-call npx playwright install
-call npm run test:headed
-```
-
-| Line | Why |
-|---|---|
-| `call npm ci` | Installs the exact versions from `package-lock.json` into a clean `node_modules`. Needed every build, because new dev dependencies (e.g. `cross-env`) arrive through Git. |
-| `call npx playwright install` | Recommended. Makes sure the browser builds match the installed Playwright version; quick when they're already cached for this Windows user. Without it, a Playwright upgrade pushed to Git fails with "Executable doesn't exist". |
-| `call npm run test:headed` | Runs all tests with visible, maximized windows. Use `call npm run test:headless` instead when nobody watches the run. |
-| `call` on every line | `npm`/`npx` are `.cmd` files; without `call`, Windows ends the batch step after the first one. |
-
-**Post-build Actions → Publish HTML reports** (HTML Publisher plugin)
-
-Field names below match the Jenkins 2.568 screen. Values marked ✏️ need changing from what's there now.
-
-| Field (as on screen) | Current value | Example value | Status | Purpose |
-|---|---|---|---|---|
-| HTML directory to archive | *(blank)* | ✏️ `playwright-report` | 🔶 Practically required | Folder, relative to the workspace, that Playwright writes its report to (set by the `html` reporter in `playwright.config.js`). Left blank, Jenkins copies the whole workspace, including `node_modules`. |
-| Index page[s] | `index.html` | `index.html` | ✅ Mandatory | Page opened when you click the report link. Playwright's report entry page is `index.html`. |
-| Index page title[s] (Optional) | *(blank)* | `Playwright Results` | ⬜ Optional | Tab label inside the report viewer when there are several index pages. With one page you can leave it blank. |
-| Report title | `HTML Report` | ✏️ `Playwright Report` | ⬜ Optional | Name of the link shown in the job's left-hand menu and on each build page. |
-
-**Publish HTML reports → Publishing options** (click the dropdown to show them)
-
-| Option | Example value | Status | Purpose |
-|---|---|---|---|
-| Keep past HTML reports | ✅ ticked | ⬜ Optional (recommended) | Keeps a report per build, so you can open the report of an older run. Unticked, only the latest report survives. |
-| Always link to last build | ☐ unticked | ⬜ Optional | Ticked, the job page links to the report of the last build even if it failed. Unticked, it links to the last *successful* build's report. Tick it if you mostly need the report when tests fail. |
-| Allow missing report | ✅ ticked | ⬜ Optional (recommended) | Stops the publisher from adding its own error when no report exists, e.g. when the Git checkout failed before tests ran. |
-| Include files | `**/*` | ⬜ Optional | Which files inside the report folder to copy. Keep the default; Playwright's report needs its `data/` and `trace/` subfolders. |
-| Escape underscores in Report Title | ✅ ticked (default) | ⬜ Optional | Turns `_` in the title into a URL-safe form. Leave as is. |
-| Number of workers | `0` (default) | ⬜ Optional | Parallel copy threads. `0` copies on the build's own thread, fine for a small report. |
-
-> The Playwright HTML report needs JavaScript, which Jenkins's default Content Security Policy blocks, so the report opens as a blank page. See [Section 14.7](#147-viewing-the-playwright-report-in-jenkins) for the fix.
-
-**Post-build Actions → E-mail Notification** (built into Jenkins core)
-
-| Field (as on screen) | Example value | Status | Purpose |
-|---|---|---|---|
-| Recipients | `qa-team@example.com shivam@example.com` | ⚠️ Conditionally mandatory | Who gets the email. Separate addresses with spaces, not commas. Build parameters like `$NOTIFY_TO` also work. Leaving it blank means nobody is emailed. |
-| Send e-mail for every unstable build | ✅ ticked (default) | ⬜ Optional | Ticked: an email for every unstable build. Unticked: only the first unstable build after a stable one. |
-| Send separate e-mails to individuals who broke the build | ☐ unticked | ⬜ Optional | Also emails the authors of the commits in the failing build. Only works when a commit author's email belongs to a Jenkins user; otherwise the console shows `Not sending mail to unregistered user <address>` and skips them (harmless). |
-
-This action only sends mail when a build **fails**, becomes **unstable**, or **returns to stable**. A passing build after a passing build sends nothing.
-
-It also needs Jenkins to know how to send mail. Until you configure it, Jenkins tries a mail server on your own PC (`localhost`, port `25`), and every failed build ends with `Couldn't connect to host, port: localhost, 25`. Configure it once under **Manage Jenkins → System → E-mail Notification**:
-
-| Field | Example value (Gmail) | Status | Purpose |
-|---|---|---|---|
-| SMTP server | `smtp.gmail.com` | ✅ Mandatory for email | Mail server Jenkins sends through. |
-| Default user e-mail suffix | `@example.com` | ⬜ Optional | Turns Jenkins user names into addresses for "individuals who broke the build". |
-| Advanced → Use SMTP Authentication → User Name / Password | your Gmail address / a 16-character app password | ⚠️ Conditionally mandatory | Gmail and most providers require login. Your normal Gmail password is rejected. Create an app password at **Google Account → Security → App passwords**; the option only appears once **2-Step Verification** is on. |
-| Advanced → Use SSL / Use TLS | TLS ticked | ⚠️ Conditionally mandatory | Encryption the server expects. |
-| Advanced → SMTP Port | `587` (TLS) or `465` (SSL) | ⚠️ Conditionally mandatory | Must match the encryption choice. |
-| Test configuration by sending test e-mail → Test e-mail recipient | your address | ⬜ Optional | Sends a test mail so you know SMTP works before a real build fails. |
-
-Also set **Manage Jenkins → System → Jenkins Location → System Admin e-mail address** (e.g. `jenkins@example.com`); it's the "From" address and many servers reject mail without one.
-
-> For HTML emails, attachments or sending on every build, use the **Editable Email Notification** action from the Email Extension plugin instead.
-
-### 14.3 Save and Run
-
-1. Click **Save**, then **Build Now**.
-2. Open the build → **Console Output**. A good run checks out the commit, prints `Running 7 tests using N workers`, then `7 passed`.
-3. Open **Playwright Report** on the job page for screenshots and traces of any failure.
-
-### 14.4 Headed vs Headless Runs
-
-In this setup the build environment had `CI` set: the console showed `Running 7 tests using 1 worker`, while the same command on the desktop used 6 workers, and the project's config limits workers to 1 only when `CI` is set. The config also treated `CI` as "always headless" and gave every browser a fixed 1920×1080 page. The original build step, `npx playwright test --headed`, forced windows open anyway, so they kept the 1920×1080 size and ran off a 1920×1080 screen at 125% Windows scaling (only 1536×816 usable).
-
-| Approach | Result |
-|---|---|
-| `npx playwright test --headed` | ❌ Windows open, but the config doesn't know, so they keep the fixed headless size and aren't maximized. |
-| `npm run test:headed` (sets `HEADLESS=false`) | ✅ The config sees an explicit `HEADLESS=false`, which takes priority over `CI`, and maximizes every window to the real screen. |
-| `npm run test:headless` (sets `HEADLESS=true`) | ✅ No windows; fixed 1920×1080 page for repeatable results. |
-
-Two prerequisites for headed runs on a Windows Jenkins:
-
-- Jenkins (or the agent running the job) must run in a **logged-in desktop session**. A Jenkins installed as a Windows service runs where no desktop is visible, so use `test:headless` there.
-- The screen stays at whatever resolution and scaling the logged-in user has; the maximized windows adapt to it automatically.
-
-### 14.5 Getting Local Changes into Jenkins
-
-The job builds whatever is on GitHub, not the files on your disk. After changing the project:
-
-```powershell
-git add -A
-git commit -m "Describe the change"
-git push origin master
-```
-
-Then **Build Now**. The console's `Commit message:` line confirms which commit was built.
-
-### 14.6 Troubleshooting
-
-**Checkout fails with `Failed to connect to github.com:443 after 21136 ms: Could not connect to server`**
-
-The machine couldn't open a connection to GitHub. Bad credentials look different (`Authentication failed` or `403`). If an earlier build with the same settings fetched fine, something about the network changed.
-
-| Step | Command / action | What it tells you |
-|---|---|---|
-| 1. Test the connection | `Test-NetConnection github.com -Port 443` | `TcpTestSucceeded : True` means the network path is open. |
-| 2. Test git itself | `git ls-remote https://github.com/<owner>/Paimana_Dev.git` | Lists branches if git can reach and read the repo. If both work, the failure was temporary: rebuild. |
-| 3. Check GitHub | Open https://www.githubstatus.com | Rules out an outage. |
-| 4. Look for a proxy | `netsh winhttp show proxy` and the *ProxyServer* value under `HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings` | Browsers use the Windows proxy automatically; `git.exe` doesn't. |
-| 5. Tell git about the proxy | `git config --global http.proxy http://HOST:PORT` | Applies to Jenkins too when it runs under the same Windows user. Alternatively add `HTTPS_PROXY` under **Manage Jenkins → System → Global properties → Environment variables**. |
-| 6. VPN / firewall | Toggle the VPN; allow `git.exe` in the firewall/antivirus | Whichever state lets step 2 succeed is the one to build in. |
-
-> **Manage Jenkins → Plugins → Advanced → HTTP Proxy** only affects plugin downloads, not the `git` command used for checkout.
-
-**Reading a failed build log**
-
-One failure often produces several errors further down the log. Fix the **first** one; the rest usually disappear with it. A typical chain:
-
-1. `Error: playwright.config.js: config.workers must be a number or percentage` → tests never start.
-2. `Build step 'Execute Windows batch command' marked build as failure`.
-3. `Specified HTML directory ... playwright-report does not exist` → no report, because no tests ran.
-4. `Couldn't connect to host, port: localhost, 25` → the failure email can't be sent (separate mail setup issue).
-
-**Other symptoms seen with this job**
-
-| Symptom | Cause | Fix |
-|---|---|---|
-| Firefox tests time out on `page.goto` | A third-party font never finishes loading, so Firefox's `load` event never fires | Navigate with `waitUntil: 'domcontentloaded'`; assertions still wait for their own elements. |
-| `Running N tests using 1 worker` in Jenkins but more locally | `CI` is set in the build environment, and the config sets `workers: 1` when `CI` is set | Pass a worker count from the build step. See [Section 14.8](#148-running-tests-in-parallel-on-jenkins). |
-| **Playwright Report** link opens a blank page with only *Back to …* and *Zip* | Jenkins's Content Security Policy blocks the report's JavaScript | See [Section 14.7](#147-viewing-the-playwright-report-in-jenkins). |
-| `HEADLESS must be 'true' or 'false'` | A typo in the `HEADLESS` value | Use exactly `true` or `false`. |
-| `config.workers must be a number or percentage` | The config passes the `WORKERS` environment variable (always text, e.g. `"50"`) straight to Playwright | Convert it in the config with `resolveWorkers()`, see [Section 14.8](#148-running-tests-in-parallel-on-jenkins). |
-| Console shows `set WORKERS=50` although the step says `50%` | `%` is special in `.bat` files | Write `set WORKERS=50%%`, or use a whole number like `4`. |
-| `Specified HTML directory '...\playwright-report' does not exist` | The tests never ran (an earlier error stopped the build), so no report was written | Fix the first error in the console. Tick **Allow missing report** so this extra error doesn't appear. |
-| `Couldn't connect to host, port: localhost, 25` | No mail server configured in Jenkins | Set SMTP under **Manage Jenkins → System → E-mail Notification**, see [Section 14.2](#142-field-by-field-configuration). |
-| `Not sending mail to unregistered user <address>` | *Send separate e-mails to individuals who broke the build* is ticked and the commit author isn't a Jenkins user | Harmless. Untick the option if you don't need it. |
-
-### 14.7 Viewing the Playwright Report in Jenkins
-
-After the HTML Publisher is set up ([Section 14.2](#142-field-by-field-configuration)), the job page shows a **Playwright Report** link in the left menu and above **Permalinks**. Clicking it may show only a thin bar with **Back to Paimana_Dev**, a **Playwright Results** tab and **Zip**, and nothing below.
-
-**Why:** the report was archived correctly, but the Playwright report is a single-page JavaScript app. Jenkins serves every archived file with a strict Content Security Policy (CSP) header that blocks scripts, so the page never draws. Nothing is wrong with the job or the tests.
-
-Choose one of these fixes.
-
-**Option A: relax the CSP until Jenkins restarts (quick test)**
-
-1. Go to **Manage Jenkins → Script Console** (`http://localhost:8080/manage/script`).
-2. The **Console** box already holds a sample line (`println(Jenkins.instance.pluginManager.plugins)`). Click inside it, press **Ctrl+A**, then **Delete**.
-3. Paste this and click **Run** (bottom right):
-
-   ```groovy
-   System.setProperty("hudson.model.DirectoryBrowserSupport.CSP", "")
-   println("CSP is now: [" + System.getProperty("hudson.model.DirectoryBrowserSupport.CSP") + "]")
-   ```
-
-4. The result below the box should read `CSP is now: []`. Empty brackets mean the restriction is off.
-5. Reopen the report and press **Ctrl+F5**. No rebuild is needed: the CSP is a header Jenkins adds each time it serves the page, so existing reports work straight away.
-
-The setting is lost when Jenkins restarts, so run it again after every restart (or use Option B).
-
-**How to tell a blocked report from an empty one**
-
-A Playwright report keeps its results inside `index.html`, so a blank page doesn't mean the data is missing. Check before changing anything:
-
-| Check | Result | Meaning |
-|---|---|---|
-| On the blank report page press **F12 → Console** | Red errors such as *Refused to execute inline script because it violates the following Content Security Policy directive* | The data is there; the CSP blocks it. Use Option A or B. |
-| Job page → **Workspace → playwright-report** | `index.html` of several hundred KB | The report was written correctly. A `data` folder only appears when tests saved screenshots or traces. |
-| Same place | No folder, or a tiny `index.html` | The report wasn't written: the test run failed to start or was aborted. Check the build's **Console Output**. |
-| Build list icon | Grey slash (aborted) | Playwright writes the report only when the run ends, so an aborted build leaves no new report. The job-level **Playwright Report** link then shows the last *successful* build's report; open a specific build to see its own. |
-
-**Option B: relax the CSP permanently**
-
-Add the same setting to the command that starts Jenkins:
-
-```bat
-java -Dhudson.model.DirectoryBrowserSupport.CSP="" -jar jenkins.war
-```
-
-If you start Jenkins from a shortcut or a `.bat` file, edit the command there. If Jenkins is installed as a Windows service, add the `-D...` argument in `jenkins.xml` inside the `<arguments>` element, before `-jar`, then restart the service.
-
-| Field / setting | Example value | Purpose |
-|---|---|---|
-| `hudson.model.DirectoryBrowserSupport.CSP` | `""` (empty) | Turns off the CSP header for archived files, so reports can run their JavaScript. |
-
-**Security trade-off:** with the CSP off, any HTML a build archives can run scripts while you're logged in to Jenkins. That's acceptable on a personal Jenkins that only builds your own repositories. On a shared Jenkins, prefer Option C or D.
-
-**Option C: download the report instead (no Jenkins change)**
-
-1. On the blank report page, click **Zip** (top right).
-2. Unzip it, then from the folder containing the unzipped report run:
-
-   ```bat
-   npx playwright show-report <unzipped-folder>
-   ```
-
-   `show-report` serves the report over a local web server. Opening `index.html` directly from disk also mostly works, but traces need the server.
-
-**Option D: Resource Root URL (shared Jenkins)**
-
-An administrator can set **Manage Jenkins → System → Serve resource files from another domain → Resource Root URL** to a second hostname that points at the same Jenkins (e.g. `http://jenkins-files.example.local:8080/`). Jenkins then serves archived files from that separate address, isolating them from your login session, which lets reports work more safely. It needs a second DNS name or hosts-file entry; check the Jenkins documentation on *Configuring Content Security Policy* before relying on it.
-
-### 14.8 Running Tests in Parallel on Jenkins
-
-**Symptom:** the console shows `Running 7 tests using 1 worker` in Jenkins, while the same project uses several workers locally (`Running 7 tests using 6 workers`), so the Jenkins run takes several times longer.
-
-**Cause:** Playwright's default config template contains
-
-```js
-workers: process.env.CI ? 1 : undefined,
-```
-
-Locally `CI` isn't set, so Playwright picks the number of workers itself (half the CPU cores). In this Jenkins job `CI` is set, so the config forces one worker and every test runs after the previous one. `fullyParallel: true` doesn't help: it only spreads tests across the workers that exist. The template assumes CI machines are small shared containers, which isn't true for a Jenkins running on your own PC.
-
-The same `CI` check sets `retries: 2`, which is fine to keep on Jenkins.
-
-**Option A: pass the worker count in the build step (no code change)**
-
-The `--workers` command-line option overrides the config. With an npm script, put `--` before it so npm passes it on to Playwright:
-
-```bat
-call npm ci
-call npx playwright install
-call npm run test:headed -- --workers=4
-```
-
-**Option B: let a `WORKERS` variable override the CI default (project change)**
-
-In `playwright.config.js`, add this function above `defineConfig` and use it for `workers`:
-
-```js
-/**
- * Number of parallel workers. Priority: WORKERS env var > CI (1) > Playwright's default.
- * WORKERS can be a whole number (4) or a percentage of CPU cores (50%).
- */
-function resolveWorkers() {
-  const value = process.env.WORKERS?.trim();
-  if (!value) return process.env.CI ? 1 : undefined;
-  if (/^\d+%$/.test(value)) return value; // "50%" stays text
-  if (/^\d+$/.test(value)) return Number(value); // "4" becomes the number 4
-  throw new Error(
-    `WORKERS must be a number like 4 or a percentage like 50%, got '${process.env.WORKERS}'`,
-  );
+## Appendix I: The Same Job as a Pipeline
+
+The Freestyle job from Part C, written as a Jenkinsfile. Commit it as `Jenkinsfile` at the repository root, then create a **Pipeline** job ([Appendix C](#appendix-c-pipeline)) with **Definition: Pipeline script from SCM**, the same repository, credential and branch, and **Script Path** `Jenkinsfile`.
+
+```groovy
+pipeline {
+    agent any
+
+    options {
+        timestamps()                                   // Timestamper plugin
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()
+    }
+
+    environment {
+        WORKERS = '4'                                  // read by resolveWorkers()
+    }
+
+    stages {
+        stage('Install') {
+            steps {
+                bat 'npm ci'
+                bat 'npx playwright install'
+            }
+        }
+        stage('Test') {
+            steps {
+                bat 'npm run test:headed'
+            }
+        }
+    }
+
+    post {
+        always {
+            publishHTML(target: [
+                reportDir            : 'playwright-report',
+                reportFiles          : 'index.html',
+                reportName           : 'Playwright Report',
+                keepAll              : true,
+                alwaysLinkToLastBuild: false,
+                allowMissing         : true,
+            ])
+        }
+        failure {
+            mail to: 'qa-team@example.com',
+                 subject: "FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                 body: "See ${env.BUILD_URL}console"
+        }
+    }
 }
-
-export default defineConfig({
-  workers: resolveWorkers(),
-  // ...rest unchanged
-});
 ```
 
-**Why the conversion matters:** environment variables are always text. Playwright accepts `workers` as a number (`4`) or as percentage text (`"50%"`), but rejects plain text like `"4"` with `config.workers must be a number or percentage`. Passing `process.env.WORKERS` straight through (e.g. `workers: process.env.WORKERS ?? ...`) fails this way. `.trim()` also removes a trailing space, which `set` in a batch file keeps.
-
-Then set it in the Jenkins build step:
-
-```bat
-set WORKERS=4
-call npm ci
-call npx playwright install
-call npm run test:headed
-```
-
-For a percentage, write `set WORKERS=50%%`. Jenkins saves the step as a `.bat` file, where a single `%` starts a variable name, so `50%` arrives as `50`. That's then read as **50 workers**, i.e. up to 50 browsers at once, not half the CPU. Don't put a space after the value either: `set WORKERS=4 ` stores `4 ` with the space.
-
-You can confirm what the build received in the console: Jenkins echoes each batch line, e.g. `set WORKERS=50` shows the `%` was lost.
-
-Option B also needs the change pushed to Git ([Section 14.5](#145-getting-local-changes-into-jenkins)), and `WORKERS` added to `.env.example` so others know it exists. You can also set it once for all jobs under **Manage Jenkins → System → Global properties → Environment variables** (Name `WORKERS`, Value `4`).
-
-**Choosing a number**
-
-| Value | When to use |
+| Freestyle field (Part C) | Jenkinsfile equivalent |
 |---|---|
-| `1` | Tests share state that can't run at the same time (e.g. the same test user changing data). |
-| `2`–`4` | Recommended for Jenkins on a desktop PC: Jenkins, the browsers and anything else you're doing share the same CPU and memory. |
-| `50%` | A dedicated build machine with nothing else running. |
+| Discard old builds → 20 | `buildDiscarder(logRotator(numToKeepStr: '20'))` |
+| Add timestamps | `timestamps()` |
+| Terminate a build if it's stuck → 30 min | `timeout(time: 30, unit: 'MINUTES')` |
+| `set WORKERS=4` | `environment { WORKERS = '4' }` |
+| Execute Windows batch command | one `bat '...'` per command; `call` isn't needed because each `bat` is its own script |
+| Publish HTML reports | `publishHTML(...)` in `post { always { } }` |
+| E-mail Notification | `mail` in `post { failure { } }` |
 
-In headed mode, each worker opens its own maximized window, so several windows stack on top of each other. That's harmless, but if you're watching the run, fewer workers make it easier to follow.
-
-**Check:** after the change, the console's first test line should read `Running 7 tests using 4 workers` (or your number, capped at the number of tests).
+Inside `bat '...'`, the `%%` rule from Step 8 still applies. Checkout happens automatically (`checkout scm`) because the Jenkinsfile comes from Git.
 
 ---
 
