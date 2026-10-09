@@ -2,11 +2,19 @@
 
 Follow the steps in order, top to bottom. Each step says **where** to go in Jenkins, **what to enter** (with sample data), **why**, and **how to check** it worked. Reference material for the other Jenkins job types is in the appendices at the end.
 
-| Line | Meaning |
-| :--- | :--- |
-| `TZ=Asia/Kolkata` | Times are in IST |
-| `0 11 * * *` | Every day, including Saturday and Sunday, at 11:00 AM |
-| `30 11 * * 1-5` | Monday to Friday at 11:30 AM |
+## AM / PM times
+
+Jenkins uses a 24-hour clock, so there is no AM/PM. For a PM time, add 12 to the hour.
+
+| Time | Hour value | Schedule line (every day) |
+| :--- | :---: | :--- |
+| 11:00 AM | 11 | `0 11 * * *` |
+| 12:00 noon | 12 | `0 12 * * *` |
+| 1:00 PM | 13 | `0 13 * * *` |
+| 3:30 PM | 15 | `30 15 * * *` |
+| 6:00 PM | 18 | `0 18 * * *` |
+| 11:30 PM | 23 | `30 23 * * *` |
+| 12:00 midnight | 0 | `0 0 * * *` |
 
 ---
 
