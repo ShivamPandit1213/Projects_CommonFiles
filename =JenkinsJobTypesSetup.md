@@ -2,10 +2,11 @@
 
 Follow the steps in order, top to bottom. Each step says **where** to go in Jenkins, **what to enter** (with sample data), **why**, and **how to check** it worked. Reference material for the other Jenkins job types is in the appendices at the end.
 
-Line	            Meaning
-TZ=Asia/Kolkata	Times are in IST
-0 11 * * *	      Every day, including Saturday and Sunday, at 11:00 AM
-30 11 * * 1-5	   Monday to Friday at 11:30 AM
+| Line | Meaning |
+| :--- | :--- |
+| `TZ=Asia/Kolkata` | Times are in IST |
+| `0 11 * * *` | Every day, including Saturday and Sunday, at 11:00 AM |
+| `30 11 * * 1-5` | Monday to Friday at 11:30 AM |
 
 ---
 
