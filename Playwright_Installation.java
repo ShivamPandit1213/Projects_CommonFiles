@@ -1,12 +1,238 @@
 ========================================================
-PLAYWRIGHT - COMPLETE COMMAND REFERENCE
-Every command, what it does, and when to use it
-========================================================
-
-========================================================
 PART 1 - QUICK LOOKUP BY INTENT
 ========================================================
+Prerequisites
+Node.js v18+ (node.js.org — download and install, then restart your terminal)
+npm / npx (comes bundled automatically with Node.js)
+VS Code (recommended IDE)
+    
+Bash
+# Print installed Node.js runtime version
+node -v
 
+# Print Node Package Manager version
+npm -v
+
+# Print npm package runner version
+npx -v
+--------------------------------------------------------------
+Existing Project Workflow
+PowerShell
+# Navigate into the target project root folder
+cd C:\Users\shiva\OneDrive\JavaSelenium\PAIMANA_Playwright_1.1
+
+# List directory contents to ensure package.json and playwright.config.ts exist
+dir
+------------------------------------------------------------------------
+# Check modified files and current working branch
+git status
+
+# Link your local 'main' branch to track the remote 'origin/main' branch
+git branch --set-upstream-to=origin/main main
+
+# Download remote commits and merge them directly into your local main branch
+git pull origin main
+
+# (Optional fallback) Pull if local and remote commit histories do not share a common ancestor
+git pull origin main --allow-unrelated-histories
+
+# Install all project libraries declared in package.json into node_modules
+npm install
+
+# Download the browser binaries (Chromium, Firefox, WebKit) managed by Playwright
+npx playwright install
+
+# List all discovered test cases without executing them to verify test paths
+npx playwright test --list
+
+# Execute all Playwright tests across configured browser engines
+npx playwright test
+
+# Launch a local web server to inspect HTML test results, attachments, and failure traces
+npx playwright show-report
+==================================================================================================
+PART 2 — Playwright Java (Maven) Project
+Prerequisites
+JDK 17 or 21 (adoptium.net)
+
+Apache Maven (maven.apache.org or bundled inside your IDE)
+
+Bash
+# Print the system-default Java runtime version
+java -version
+
+# Print the active Maven version and the JDK it is currently bound to
+mvn -version
+---------------------------------------------------------------------------------------------------------------
+:: Set system-wide JAVA_HOME path permanently if Maven points to an old JDK (restart CMD after running)
+setx JAVA_HOME "C:\Program Files\Java\jdk-21.0.12"
+------------------------------------------------------------------------
+Existing Project Workflow
+PowerShell
+# Navigate to the Java automation project root folder
+cd C:\Users\shiva\OneDrive\JavaSelenium\paimana-playwright-java
+
+# Verify pom.xml is present in the current working directory
+dir
+------------------------------------------------------------------------------------
+# Sync local main branch with remote repository changes
+git branch --set-upstream-to=origin/main main
+git pull origin main
+
+# Clean previous build artifacts (/target folder) and compile source code
+mvn clean compile
+
+# Download Playwright-managed browser binaries using Playwright's Java CLI wrapper
+mvn exec:java -e -D exec.mainClass=com.microsoft.playwright.CLI -D exec.args="install"
+
+# Fallback method: install browsers if exec-maven-plugin is missing from pom.xml
+mvn dependency:build-classpath -Dmdep.outputFile=cp.txt
+java -cp "target/classes;%cp.txt%" com.microsoft.playwright.CLI install
+
+# Execute all test classes matching Surefire patterns (e.g. *Test.java)
+mvn test
+
+# Run a single specific test class
+mvn test -Dtest=LoginTest
+
+# Run tests defined within a custom TestNG XML suite file
+mvn test -DsuiteXmlFile=suites/smoke.xml
+===============================================================================
+PART 3 — Headless vs. Maximized Window Strategy
+Why Maximizing Breaks on Jenkins
+Session 0 Limitations: When Jenkins runs as a background Windows Service, Windows launches it in an isolated desktop (Session 0) without a real display. In this session, GUI windows are clamped to a virtual 1024×768 resolution or hidden entirely.
+
+Interactive Mode (java -jar jenkins.war): If Jenkins runs in your logged-in desktop session, browser windows appear on your screen normally. However, locking Windows (Win + L) suspends graphics rendering, causing window-maximize calls to fail.
+
+Headless Mode Has No Real Window: A headless browser renders frames in memory. Operating system flags like --start-maximized and OS maximize scripts are ignored because there is no OS window container. To guarantee full-HD test execution, you must define an explicit 1920×1080 viewport fallback.
+
+Configuration Reference: playwright.config.js / .ts
+----------------------------------------------------------------------------------------------
+import { defineConfig, devices } from '@playwright/test';
+
+// Define standard 1080p full-screen dimensions for consistent screenshots & viewport
+const FULL_HD = { width: 1920, height: 1080 };
+
+function resolveHeadless() {
+  // Read HEADLESS variable from process environment (Jenkins parameter or local terminal)
+  const fromEnv = process.env.HEADLESS?.trim().toLowerCase();
+  
+  // 1. Explicit variable takes highest priority
+  if (fromEnv === 'true') return true;
+  if (fromEnv === 'false') return false;
+  
+  // 2. Default to headless on CI build servers if not explicitly specified
+  if (process.env.CI) return true;
+  
+  // 3. Local default: headed (open visible browser windows)
+  return false;
+}
+
+const HEADLESS = resolveHeadless();
+
+function getWindowSettings(browserName) {
+  if (HEADLESS) {
+    // In headless mode, apply a fixed 1080p viewport across all browser engines
+    return {
+      viewport: FULL_HD,
+      launchOptions: {}
+    };
+  }
+
+  // Headed configuration for Chromium
+  if (browserName === 'chromium') {
+    return {
+      // viewport: null lets Chromium fill the entire maximized OS window
+      viewport: null,
+      launchOptions: {
+        args: ['--start-maximized'] // Native Chromium flag to maximize on launch
+      }
+    };
+  }
+
+  // Headed configuration for Firefox & WebKit (neither supports --start-maximized)
+  return {
+    viewport: FULL_HD,
+    launchOptions: {
+      args: ['--width=1920', '--height=1080'] // Size the window frame on launch
+    }
+  };
+}
+
+export default defineConfig({
+  use: {
+    headless: HEADLESS,
+    trace: 'on-first-retry', // Collect execution traces only when a test fails and retries
+    screenshot: 'only-on-failure', // Capture screenshot on test failures
+  },
+  projects: [
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        ...getWindowSettings('chromium'),
+      },
+    },
+    {
+      name: 'firefox',
+      use: {
+        ...devices['Desktop Firefox'],
+        ...getWindowSettings('firefox'),
+      },
+    },
+    {
+      name: 'webkit',
+      use: {
+        ...devices['Desktop Safari'],
+        ...getWindowSettings('webkit'),
+      },
+    },
+  ],
+});
+=======================================================
+PART 4 — Jenkins Job Execution Commands (Batch Step)
+1. Headed Job Configuration
+Use this when Jenkins is started interactively (java -jar jenkins.war) and you want visible, maximized browser windows. Keep the desktop unlocked while tests run.
+---------------------------------------------------------------------------------
+:: 1. Navigate to the local repository directory on the Jenkins machine
+cd C:\Users\shiva\Projects\PlaywrightBasic1
+
+:: 2. Pull the latest committed code from GitHub main
+git pull origin main
+
+:: 3. Fast, clean dependency install matching package-lock.json exactly
+call npm ci
+
+:: 4. Ensure required browser binaries are present and up-to-date
+call npx playwright install
+
+:: 5. Force headed mode so the browser window launches on the interactive desktop
+set HEADLESS=false
+
+:: 6. Run the Playwright test suite
+call npx playwright test
+---------------------------------------
+    2. Headless CI Job Configuration (Recommended for Production)
+Runs tests in the background with a uniform 1920×1080 screen size. Unaffected by workstation screen locks or remote desktop disconnects.
+--------------------------------------------------------------------
+:: 1. Navigate to the local repository directory on the Jenkins machine
+cd C:\Users\shiva\Projects\PlaywrightBasic1
+
+:: 2. Pull latest test scripts from the remote branch
+git pull origin main
+
+:: 3. Clean install of node dependencies matching package-lock.json
+call npm ci
+
+:: 4. Ensure browser binaries are up-to-date
+call npx playwright install
+
+:: 5. Set HEADLESS to true to run browsers invisibly with the 1920x1080 viewport
+set HEADLESS=true
+
+:: 6. Run the test suite and output results for Jenkins reporters
+call npx playwright test
+===========================================================================
     I want to run my tests
         npx playwright test
 
