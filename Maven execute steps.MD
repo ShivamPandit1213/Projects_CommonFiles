@@ -25,9 +25,10 @@ Both are skipped by the shell, so you can paste whole blocks.
 - [Step 2 — Run the default suite](#step-2--run-the-default-suite)
 - [Step 3 — Force a clean run](#step-3--force-a-clean-run)
 - [Step 4 — Run a different suite file](#step-4--run-a-different-suite-file)
-- [Step 5 — Run one class or one method](#step-5--run-one-class-or-one-method)
-- [Step 6 — Debug a failure](#step-6--debug-a-failure)
-- [Step 7 — Read the results](#step-7--read-the-results)
+- [Step 5 — Run with a Maven profile (`-Pe2e`)](#step-5--run-with-a-maven-profile--pe2e)
+- [Step 6 — Run one class or one method](#step-6--run-one-class-or-one-method)
+- [Step 7 — Debug a failure](#step-7--debug-a-failure)
+- [Step 8 — Read the results](#step-8--read-the-results)
 - [Quick Reference](#quick-reference)
 - [pom.xml Settings That Make This Work](#pomxml-settings-that-make-this-work)
 - [Running from Jenkins](#running-from-jenkins)
@@ -185,7 +186,76 @@ mvn test "-DsuiteXmlFile=suite/regression.xml"
 
 ---
 
-## Step 5 — Run one class or one method
+## Step 5 — Run with a Maven profile (`-Pe2e`)
+
+A **profile** is a named set of settings in `pom.xml` (suite file, properties, plugin
+options) that you switch on with `-P<id>`. `-Pe2e` activates the profile whose
+`<id>` is `e2e`, typically the full end-to-end run: UploadCV, then NaukriTest, in
+suite order. Works only if `pom.xml` defines that profile (see
+[pom.xml settings](#pomxml-settings-that-make-this-work)).
+
+```cmd
+:: Run the tests with the e2e profile switched on
+mvn test -Pe2e
+
+:: Same, with a clean build first (recommended for full end-to-end runs)
+mvn clean test -Pe2e
+
+:: Profile plus a property override: e2e settings, but a different suite file
+mvn clean test -Pe2e -DsuiteXmlFile=suite/regression.xml
+
+:: Two profiles at once (comma-separated, no spaces); "headless" is an example id
+mvn clean test -Pe2e,headless
+```
+
+**PowerShell**: `-Pe2e` alone needs no quotes. Quote it as soon as there is a comma,
+an `!` or a `-D` option:
+
+```powershell
+mvn test -Pe2e
+mvn clean test -Pe2e "-DsuiteXmlFile=suite/regression.xml"
+# The comma would make PowerShell pass two separate arguments
+mvn clean test "-Pe2e,headless"
+```
+
+**Check which profiles exist and which are active** (no tests run):
+
+```cmd
+:: Every profile defined in pom.xml (and settings.xml), with its id
+mvn help:all-profiles
+
+:: Which profiles WOULD be active for this command line
+mvn help:active-profiles -Pe2e
+
+:: The final pom after the e2e profile is merged in; search it for suiteXmlFile
+mvn help:effective-pom -Pe2e > effective-pom.xml
+findstr /n /i "suiteXmlFile" effective-pom.xml
+```
+
+**Switching a profile off.** If a profile is marked `activeByDefault`, turn it off with `-P-<id>`
+(`-P!<id>` also works in `cmd`):
+
+```cmd
+:: Run without the e2e profile even if it is active by default
+mvn test -P-e2e
+```
+
+```powershell
+# PowerShell: quote it, so "-P-e2e" is passed exactly as written
+mvn test "-P-e2e"
+```
+
+> **Typo warning.** An unknown profile id does **not** stop the build. Maven prints
+> `[WARNING] The requested profile "e2E" could not be activated because it does not exist.`
+> and then runs with the **default** settings. Profile ids are case-sensitive: `-Pe2e`
+> and `-PE2E` are different. After a profile run, check the start of the console for that
+> warning.
+
+[↑ Contents](#contents)
+
+---
+
+## Step 6 — Run one class or one method
 
 Quick, isolated debugging of one class. Not for real end-to-end runs.
 
@@ -218,7 +288,7 @@ mvn test "-Dtest=UploadCV,NaukriTest"
 > and listeners. If NaukriTest depends on UploadCV having uploaded the CV first, running
 > NaukriTest alone skips that step, and the test may fail or behave differently. Even
 > `-Dtest=UploadCV,NaukriTest` doesn't guarantee that order. For an ordered run, use the
-> suite (Step 2 or Step 4).
+> suite (Step 2, 4 or 5).
 
 If a class name matches nothing, Surefire stops with
 `No tests matching pattern "..." were executed`. Check the exact class name with
@@ -228,7 +298,7 @@ If a class name matches nothing, Surefire stops with
 
 ---
 
-## Step 6 — Debug a failure
+## Step 7 — Debug a failure
 
 Try these in order; each shows more than the last.
 
@@ -249,14 +319,14 @@ findstr /n /i "ERROR Exception" maven-debug.log
 With `-X`, don't read top to bottom: search for the first `ERROR` or `Exception`. The
 lines just above it usually name the cause.
 
-Also check the TestNG output in `target\surefire-reports\` (Step 7): the failing test's
+Also check the TestNG output in `target\surefire-reports\` (Step 8): the failing test's
 exception and stack trace are there, even when the console summary is short.
 
 [↑ Contents](#contents)
 
 ---
 
-## Step 7 — Read the results
+## Step 8 — Read the results
 
 After every run, Surefire writes reports to `target\surefire-reports\`.
 
@@ -288,6 +358,12 @@ start target\surefire-reports\emailable-report.html
 | Run the default suite | `mvn test` | `mvn test` | `suite/testng.xml` via the pom default |
 | Fresh run | `mvn clean test` | `mvn clean test` | Deletes `target\` first |
 | Specific suite | `mvn test -DsuiteXmlFile=suite/regression.xml` | `mvn test "-DsuiteXmlFile=suite/regression.xml"` | Quotes required in PowerShell |
+| End-to-end profile | `mvn test -Pe2e` | `mvn test -Pe2e` | Activates the `e2e` profile in `pom.xml` (Step 5) |
+| Fresh e2e run | `mvn clean test -Pe2e` | `mvn clean test -Pe2e` | Recommended for full runs and Jenkins |
+| Two profiles | `mvn test -Pe2e,headless` | `mvn test "-Pe2e,headless"` | Quotes required in PowerShell (comma) |
+| Profile off | `mvn test -P-e2e` | `mvn test "-P-e2e"` | Disables an `activeByDefault` profile |
+| List profiles | `mvn help:all-profiles` | `mvn help:all-profiles` | Shows every profile id |
+| Active profiles | `mvn help:active-profiles -Pe2e` | `mvn help:active-profiles -Pe2e` | Confirms the profile id is right |
 | One class | `mvn test -Dtest=NaukriTest` | `mvn test "-Dtest=NaukriTest"` | Bypasses suite order: UploadCV won't run first |
 | One method | `mvn test -Dtest=NaukriTest#method` | `mvn test "-Dtest=NaukriTest#method"` | Same caveat |
 | Error stack trace | `mvn test -e` | `mvn test -e` | Try before `-X` |
@@ -333,8 +409,30 @@ Steps 2 and 4 rely on this configuration. Check your `pom.xml` contains the equi
 </build>
 ```
 
+**The `e2e` profile** (needed for Step 5). Add it inside `<project>`, after `<build>`:
+
+```xml
+<profiles>
+  <profile>
+    <!-- Activated with -Pe2e -->
+    <id>e2e</id>
+    <properties>
+      <!-- Full end-to-end suite: UploadCV, then NaukriTest -->
+      <suiteXmlFile>suite/testng.xml</suiteXmlFile>
+    </properties>
+  </profile>
+</profiles>
+```
+
+A profile can override any property or plugin setting. Here it only sets the suite file,
+so a second profile (for example `smoke` pointing at `suite/smoke.xml`) would follow the
+same pattern. Because the profile changes `suiteXmlFile`, Surefire must read
+`${suiteXmlFile}`, as in the block above. A hard-coded path in Surefire ignores the
+profile too.
+
 | Setting | Why |
 |---|---|
+| `<profile><id>e2e</id>` | Defines the id that `-Pe2e` activates. Without it, `-Pe2e` only prints a warning (Step 5). |
 | `<suiteXmlFile>suite/testng.xml</suiteXmlFile>` in `<properties>` | The default when no `-DsuiteXmlFile` is given, so a plain `mvn test` runs the full suite. |
 | `<suiteXmlFile>${suiteXmlFile}</suiteXmlFile>` in Surefire | Makes the suite replaceable from the command line. With a hard-coded path here instead, `-DsuiteXmlFile=...` has **no effect**. |
 | `maven.compiler.release` `21` | Compiles for Java 21. |
@@ -367,7 +465,7 @@ In a Freestyle job, use **Build Steps → Invoke top-level Maven targets**:
 | Field | Value | Why |
 |---|---|---|
 | Maven Version | the Maven installation configured under **Manage Jenkins → Tools** | Which Maven runs the goals |
-| Goals | `clean test -DsuiteXmlFile=suite/testng.xml` | Always a fresh, ordered suite run |
+| Goals | `clean test -Pe2e` | Always a fresh, ordered end-to-end run via the `e2e` profile. Without the profile: `clean test -DsuiteXmlFile=suite/testng.xml` |
 | Advanced → POM | `pom.xml` | Default; change only if the pom isn't at the repo root |
 
 Jenkins runs the goals in its own workspace, checked out from GitHub, so push changes
@@ -394,9 +492,11 @@ caused by the first one.
 | `release version 21 not supported` / `invalid target release: 21` | Maven runs on an older JDK | `mvn -version` must show Java 21; fix `JAVA_HOME` and open a new terminal. |
 | `Unknown lifecycle phase ".xml"` (PowerShell) | Unquoted `-D` option split at the dot | Quote it: `"-DsuiteXmlFile=suite/regression.xml"`. |
 | `-DsuiteXmlFile=...` seems ignored; the default suite runs | Surefire has a hard-coded path, not `${suiteXmlFile}` | Fix `pom.xml` as in [pom.xml settings](#pomxml-settings-that-make-this-work). |
+| `The requested profile "e2e" could not be activated because it does not exist` | No `<profile><id>e2e</id>` in `pom.xml`, or a typo / wrong case in `-P` | `mvn help:all-profiles` lists the real ids; add the profile as in [pom.xml settings](#pomxml-settings-that-make-this-work). |
+| `-Pe2e` runs, but the default suite/settings are used | The profile isn't defined (see the warning above), or Surefire has a hard-coded suite path | `mvn help:active-profiles -Pe2e`, then `mvn help:effective-pom -Pe2e` and check `suiteXmlFile`. |
 | `No tests matching pattern "..." were executed` | Wrong class name or wrong case in `-Dtest=` | `dir /s /b src\test\java\*.java` for exact names. |
 | `Tests run: 0` | Suite file path wrong, classes not in `src/test/java`, or package names in `testng.xml` don't match | `type suite\testng.xml` and compare `<class name=...>` with the real package and class names. |
-| NaukriTest fails when run alone, passes in the suite | It depends on UploadCV running first | Run the suite, not `-Dtest=` (Step 5 caveat). |
+| NaukriTest fails when run alone, passes in the suite | It depends on UploadCV running first | Run the suite, not `-Dtest=` (Step 6 caveat). |
 | `Could not resolve dependencies` | No network, proxy, or corrupt local repository | Check the network; `mvn clean test -U`; as a last resort delete the broken folder under `%USERPROFILE%\.m2\repository`. |
 | `SessionNotCreatedException` / browser doesn't start | Browser and driver versions don't match, or an old Selenium version without Selenium Manager | Update Selenium to 4.x recent (it downloads the right driver itself); update the browser. |
 | Browsers left open after a failed run | The test failed before `driver.quit()` | Close them, or end the processes (below). Put `driver.quit()` in an `@AfterMethod`/`@AfterClass` with `alwaysRun = true`. |
@@ -421,9 +521,10 @@ cd C:\Users\shiva\OneDrive\JavaSelenium\jobApply_Naukri
 :: 2. Confirm the suite file exists and lists the classes you expect
 type suite\testng.xml
 
-:: 3. Fresh run: also proves OneDrive isn't locking target\
+:: 3. Fresh end-to-end run: also proves OneDrive isn't locking target\
 ::    If it fails with "Failed to delete target", pause OneDrive sync and retry
-mvn clean test
+::    (without an e2e profile in pom.xml, use plain: mvn clean test)
+mvn clean test -Pe2e
 
 :: 4. Open the results
 start target\surefire-reports\index.html
