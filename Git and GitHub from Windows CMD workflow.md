@@ -427,25 +427,70 @@ git status
 ### Verify
 
 ```bat
+git branch --show-current
 git status
 git fetch origin
 git log --oneline origin/main..HEAD
 ```
 
-The last command lists exactly what the push will upload. Empty output means there is nothing to push.
+`git branch --show-current` prints the branch you are on, usually `main` or `master`. Use **that** name in every push command below. Older repositories, and repositories created before `init.defaultBranch main` was set, often use `master`.
+
+The last command lists exactly what the push will upload. Empty output means there is nothing to push. On a `master` repository, use `origin/master..HEAD`. On the very first push, `origin/main` doesn't exist yet and the command errors. That is expected; skip it.
 
 ### Act
 
 | Situation | Command |
 |---|---|
 | First push of a new repository | `git push -u origin main` |
+| Same, long form of `-u` | `git push --set-upstream origin main` |
+| First push when the branch is `master` | `git push -u origin master` |
 | Every push after that | `git push` |
 | First push of a new branch | `git push -u origin <branch>` |
 | Push a specific branch | `git push origin <branch>` |
 | Push tags | `git push --tags` |
 | Delete a branch on GitHub | `git push origin --delete <branch>` |
 
-`-u` (set upstream) is needed only once per branch. After that, plain `git push` knows where to go.
+`-u` and `--set-upstream` are the same option: `-u` is the short form. It is needed only once per branch. After that, plain `git push` knows where to go.
+
+> **Spelling:** it is `--set-upstream`, with an **r**: up-st**r**eam. A typo such as `--set-upsteam` fails with `error: unknown option 'set-upsteam'` and a long usage list, and nothing is pushed. Use the short `-u` to avoid the typo entirely.
+
+```bat
+git branch --show-current
+git push -u origin master
+git branch -vv
+```
+
+The last line must show `[origin/master]` next to the branch. From now on, `git push` and `git pull` work without arguments.
+
+### If the first push fails after the typo is fixed
+
+| You see | Cause | Fix |
+|---|---|---|
+| `! [rejected] master -> master (fetch first)` | The GitHub repository was created with a README, license or `.gitignore`, so it already has a commit you don't | `git pull --no-rebase origin master --allow-unrelated-histories`, then `git push -u origin master` |
+| The push succeeds, but GitHub shows **two** branches, `main` and `master` | The GitHub repository's default branch is `main`, and your push created a separate `master` next to it | Rename locally and push to `main` (commands below) |
+| A sign-in window, or `Authentication failed` | GitHub doesn't accept account passwords over HTTPS | Sign in through the Git Credential Manager browser window, or paste a Personal Access Token as the password ([Section 1](#1-one-time-setup)) |
+
+**Check the GitHub default branch before choosing `master` or `main`:**
+
+```bat
+git ls-remote --symref origin HEAD
+```
+
+| Output starts with | Push with |
+|---|---|
+| `ref: refs/heads/main` | `git branch -M main`, then `git push -u origin main` |
+| `ref: refs/heads/master` | `git push -u origin master` |
+| Nothing (empty repository) | Either. `main` matches GitHub's default for new repositories |
+
+**Switch a `master` repository to `main`:**
+
+```bat
+git branch -M main
+git push -u origin main
+git branch -vv
+```
+
+If a `master` branch was already pushed by mistake, delete it on GitHub only after `main` is pushed and set as the default (GitHub → Settings → Branches): `git push origin --delete master`.
 
 ### Read the output
 
@@ -454,7 +499,9 @@ The last command lists exactly what the push will upload. Empty output means the
 | `2dd823e..c5fc942  main -> main` | Success. Commits in that range were uploaded |
 | `Everything up-to-date` | Nothing new to send. Commit first if you expected changes |
 | `! [rejected] main -> main (fetch first)` | GitHub has commits you don't. See [Section 10](#10-fix-a-rejected-push) |
-| `src refspec main does not match any` | No commits on `main` yet. Commit first |
+| `src refspec main does not match any` | No commits on `main` yet, or the branch is called `master`. Check `git branch --show-current` |
+| `error: unknown option 'set-upsteam'` | Misspelled option. Nothing was pushed. Use `-u` or `--set-upstream` |
+| `branch 'master' set up to track 'origin/master'.` | Success: upstream set. Plain `git push` works from now on |
 
 ### Confirm
 
@@ -1095,7 +1142,9 @@ Find the message you're seeing, read the cause and run the fix.
 | `! [rejected] main -> main (fetch first)` | GitHub has commits you don't | [Section 10](#10-fix-a-rejected-push) |
 | `Your branch and 'origin/main' have diverged` | Often **stale**: your snapshot predates a merge | `git fetch origin`, then `git log --oneline origin/main..HEAD`. Empty means you're only behind |
 | `Your branch is behind 'origin/main' by 2 commits, and can be fast-forwarded` | Only behind, no conflict | `git pull --ff-only` |
-| `src refspec main does not match any` | No commits on that branch yet | Commit first, then push |
+| `src refspec main does not match any` | No commits on that branch yet, or the branch is named `master`, not `main` | `git branch --show-current`; commit first, or push the real name: `git push -u origin master` |
+| `error: unknown option 'set-upsteam'` (followed by a long usage list) | Typo in the option name: missing **r** | `git push --set-upstream origin <branch>`, or the short form `git push -u origin <branch>` |
+| `The current branch master has no upstream branch` | First push of this branch; no tracking set | `git push -u origin master` |
 | `Everything up-to-date` | No new local commits | Normal if already pushed |
 | `refusing to merge unrelated histories` | GitHub repo was created with a README | `git pull --no-rebase origin main --allow-unrelated-histories` |
 | `Your local changes ... would be overwritten by merge` | Uncommitted edits block the pull | `git stash`, `git pull`, `git stash pop` |
