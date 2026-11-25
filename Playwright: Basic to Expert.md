@@ -36,44 +36,59 @@ At this level you can install Playwright, write a test, run it and record one wi
 ### 1.1 Install
 
 ```bash
+# 1. Create an empty folder for the project and move into it
 mkdir pw-demo && cd pw-demo
+
+# 2. Run the Playwright setup wizard (creates the config, sample tests and a CI file)
 npm init playwright@latest
-# choose: TypeScript, tests folder = tests, add GitHub Actions = yes, install browsers = yes
+# The wizard asks a few questions. Suggested answers:
+#   Language: TypeScript | Tests folder: tests
+#   Add GitHub Actions workflow: yes | Install browsers: yes
 ```
 
 To add it to an existing project:
 
 ```bash
+# Add Playwright's test runner as a dev dependency of your existing project
 npm i -D @playwright/test
-npx playwright install --with-deps   # downloads browsers plus OS dependencies
+
+# Download Chromium, Firefox and WebKit, plus the OS libraries they need
+npx playwright install --with-deps
 ```
 
 ### 1.2 Project structure
 
 ```text
 pw-demo/
-├── playwright.config.ts      # runner configuration
-├── tests/
-│   └── example.spec.ts       # test files end in .spec.ts or .test.ts
-├── tests-examples/
-├── playwright-report/        # HTML report (generated)
-├── test-results/             # traces, screenshots, videos (generated)
-└── .github/workflows/playwright.yml
+├── playwright.config.ts      # settings: browsers, timeouts, base URL, reporters
+├── tests/                    # your test files live here
+│   └── example.spec.ts       # file names must end in .spec.ts or .test.ts
+├── tests-examples/           # a bigger sample test you can read and delete
+├── playwright-report/        # HTML report, created after a run (don't commit)
+├── test-results/             # traces, screenshots, videos of failures (don't commit)
+└── .github/workflows/playwright.yml   # ready-made GitHub Actions pipeline
 ```
 
 ### 1.3 Your first test
 
 ```ts
 // tests/first.spec.ts
+// Import `test` (to declare a test) and `expect` (to check results)
 import { test, expect } from '@playwright/test';
 
+// test(title, function). The runner hands us a fresh `page` (a new browser tab)
 test('home page has a title and a Get started link', async ({ page }) => {
+  // Open the website and wait for it to load
   await page.goto('https://playwright.dev/');
 
+  // Check that the browser tab title contains the word "Playwright"
   await expect(page).toHaveTitle(/Playwright/);
 
+  // Find the link the way a user sees it (a link whose text is "Get started") and click it
   await page.getByRole('link', { name: 'Get started' }).click();
 
+  // Check that the next page shows a heading called "Installation"
+  // (expect keeps retrying for up to 5 seconds until it appears)
   await expect(page.getByRole('heading', { name: 'Installation' })).toBeVisible();
 });
 ```
@@ -100,6 +115,8 @@ Key ideas:
 ### 1.5 Record tests with codegen
 
 ```bash
+# Opens a browser plus the Inspector window.
+# Every click and keystroke you make is written out as test code.
 npx playwright codegen https://demo.playwright.dev/todomvc
 ```
 
@@ -108,13 +125,24 @@ A browser opens next to the Inspector. Every click and keystroke becomes code, u
 ### 1.6 Using Playwright as a library (no test runner)
 
 ```ts
+// Use the 'playwright' library directly, without the test runner
 import { chromium } from 'playwright';
 
+// Wrap the code in an async function so we can use await
 (async () => {
+  // Start a Chromium browser; headless: false shows the window on screen
   const browser = await chromium.launch({ headless: false });
+
+  // Open a new tab
   const page = await browser.newPage();
+
+  // Go to the website
   await page.goto('https://example.com');
+
+  // Save a screenshot of the whole page, not just the visible part
   await page.screenshot({ path: 'example.png', fullPage: true });
+
+  // Always close the browser, otherwise the script keeps running
   await browser.close();
 })();
 ```
@@ -142,19 +170,22 @@ A locator describes *how* to find an element. Playwright resolves it again every
 Chaining and filtering:
 
 ```ts
-// narrow inside a container
+// Narrow inside a container:
+// 1) find all table rows, 2) keep only the row containing "Invoice #1042"
 const row = page.getByRole('row').filter({ hasText: 'Invoice #1042' });
+// 3) inside that row only, click the "Pay" button
 await row.getByRole('button', { name: 'Pay' }).click();
 
-// filter by a child element
+// Filter by a child element: a product card that contains the text "In stock"
 const card = page.locator('.product').filter({ has: page.getByText('In stock') });
 
-// pick from several matches
-await page.getByRole('listitem').nth(2).click();
-await page.getByRole('listitem').first().click();
+// Pick one element when several match
+await page.getByRole('listitem').nth(2).click();    // the third item (counting starts at 0)
+await page.getByRole('listitem').first().click();   // the first item
+// Check that exactly 5 list items exist
 await expect(page.getByRole('listitem')).toHaveCount(5);
 
-// either / both
+// .or(): match whichever of the two appears (useful when the UI has two versions)
 const newBtn = page.getByRole('button', { name: 'New' }).or(page.getByText('Create'));
 ```
 
@@ -163,15 +194,25 @@ Locators are **strict**. If a locator matches several elements, an action on it 
 ### 2.2 Actions
 
 ```ts
-await page.getByLabel('Email').fill('user@test.com');      // clears, then types
-await page.getByLabel('Password').pressSequentially('s3cr3t', { delay: 50 }); // key by key
+// Type into a text box (clears any existing text first)
+await page.getByLabel('Email').fill('user@test.com');
+// Type one key at a time, 50 ms apart (for fields that react to each keystroke)
+await page.getByLabel('Password').pressSequentially('s3cr3t', { delay: 50 });
+// Tick a checkbox (does nothing if it is already ticked)
 await page.getByRole('checkbox', { name: 'Remember me' }).check();
+// Choose an option from a <select> dropdown
 await page.getByLabel('Country').selectOption('India');
+// Normal left click
 await page.getByRole('button', { name: 'Submit' }).click();
+// Move the mouse over an element (opens hover menus)
 await page.getByText('Menu').hover();
+// Double-click
 await page.getByText('Row 1').dblclick();
+// Right-click (opens the context menu)
 await page.getByText('File').click({ button: 'right' });
+// Press a keyboard shortcut (select all)
 await page.keyboard.press('Control+A');
+// Drag one element and drop it on another
 await page.locator('#source').dragTo(page.locator('#target'));
 ```
 
@@ -184,21 +225,25 @@ Before an action, Playwright runs **actionability checks**. The element must be 
 **Web-first (auto-retrying) assertions** take a locator or page and retry until they pass or hit `expect` timeout (default 5 s):
 
 ```ts
-await expect(page.getByText('Saved')).toBeVisible();
-await expect(page.getByRole('button', { name: 'Pay' })).toBeEnabled();
-await expect(page.getByLabel('Name')).toHaveValue('Ravi');
-await expect(page.locator('.price')).toHaveText('₹ 499');
-await expect(page.locator('.tag')).toHaveText(['New', 'Sale']);   // list
-await expect(page.locator('.alert')).toHaveClass(/error/);
-await expect(page).toHaveURL(/\/dashboard/);
-await expect(page.locator('.toast')).toBeHidden();
+// Each of these retries until it passes or the 5-second expect timeout runs out
+await expect(page.getByText('Saved')).toBeVisible();                     // element is shown
+await expect(page.getByRole('button', { name: 'Pay' })).toBeEnabled();   // button can be clicked
+await expect(page.getByLabel('Name')).toHaveValue('Ravi');               // input contains this value
+await expect(page.locator('.price')).toHaveText('₹ 499');               // exact visible text
+await expect(page.locator('.tag')).toHaveText(['New', 'Sale']);          // several elements, in order
+await expect(page.locator('.alert')).toHaveClass(/error/);               // CSS class contains "error"
+await expect(page).toHaveURL(/\/dashboard/);                             // address bar contains /dashboard
+await expect(page.locator('.toast')).toBeHidden();                       // element is gone or invisible
 ```
 
 **Generic (non-retrying) assertions** check plain values once:
 
 ```ts
+// Read a plain value from the page first (this runs once, no retry)
 const count = await page.locator('.item').count();
+// Then check that plain value with a normal (non-retrying) assertion
 expect(count).toBeGreaterThan(0);
+// Same idea for an API response object you already have
 expect(response.status()).toBe(200);
 ```
 
@@ -216,24 +261,29 @@ Built-in fixtures: `page`, `context`, `browser`, `browserName`, `request` (API c
 ```ts
 import { test, expect } from '@playwright/test';
 
+// describe() groups related tests under one name in the report
 test.describe('Cart', () => {
+  // beforeEach runs before EVERY test in this group
   test.beforeEach(async ({ page }) => {
-    await page.goto('/shop');
+    await page.goto('/shop');   // relative path: uses baseURL from the config
   });
 
   test('adds an item', async ({ page }) => {
+    // Click the first "Add to cart" button on the page
     await page.getByRole('button', { name: 'Add to cart' }).first().click();
+    // The cart badge should now show 1
     await expect(page.getByTestId('cart-count')).toHaveText('1');
   });
 
-  test.skip('coupon flow', async () => {});          // skip
-  test.fixme('broken on Safari', async () => {});     // known broken
+  test.skip('coupon flow', async () => {});          // skipped: not run at all
+  test.fixme('broken on Safari', async () => {});     // marked as known-broken, not run
   test('slow checkout', async ({ page }) => {
-    test.slow();                                      // triples timeout
+    test.slow();                                      // gives this test 3x the normal timeout
   });
 });
 
-test.afterAll(async () => { /* cleanup once per worker */ });
+// afterAll runs once, after all tests in this file finish (per worker process)
+test.afterAll(async () => { /* cleanup, e.g. delete test data */ });
 ```
 
 Other controls: `test.only` (focus, never commit it), `test.describe.serial` (run in order, stop on first failure), `test.describe.configure({ mode: 'parallel' })`, and tags such as `test('login @smoke', ...)` run with `--grep @smoke`.
@@ -241,12 +291,17 @@ Other controls: `test.only` (focus, never commit it), `test.describe.serial` (ru
 ### 2.6 Navigation and waiting for events
 
 ```ts
+// Open a page; continue once the HTML is parsed (don't wait for every image)
 await page.goto('/login', { waitUntil: 'domcontentloaded' });
+// Wait until the address bar changes to the dashboard (** matches anything)
 await page.waitForURL('**/dashboard');
+
+// Start listening for the API response BEFORE clicking,
+// otherwise a fast response could arrive before we start waiting
 const respPromise = page.waitForResponse('**/api/orders');
 await page.getByRole('button', { name: 'Place order' }).click();
-const resp = await respPromise;          // start waiting BEFORE the click
-expect(resp.ok()).toBeTruthy();
+const resp = await respPromise;          // now wait for it to arrive
+expect(resp.ok()).toBeTruthy();          // status code is 200-299
 ```
 
 ## Level 3: Intermediate
@@ -257,29 +312,35 @@ At this level you structure a suite and handle real-world flows: page objects, s
 
 ```ts
 // pages/LoginPage.ts
+// A Page Object: one class that knows how to find and use the login page
 import { Page, Locator, expect } from '@playwright/test';
 
 export class LoginPage {
+  // Locators for each element we use, declared once
   readonly email: Locator;
   readonly password: Locator;
   readonly submit: Locator;
   readonly error: Locator;
 
+  // The constructor receives the test's page and sets up the locators
   constructor(private readonly page: Page) {
     this.email = page.getByLabel('Email');
     this.password = page.getByLabel('Password');
     this.submit = page.getByRole('button', { name: 'Sign in' });
-    this.error = page.getByRole('alert');
+    this.error = page.getByRole('alert');   // the red error message box
   }
 
+  // Open the login page
   async goto() { await this.page.goto('/login'); }
 
+  // One method for the whole "log in" action, reusable in any test
   async login(email: string, pwd: string) {
     await this.email.fill(email);
     await this.password.fill(pwd);
     await this.submit.click();
   }
 
+  // Small helper: check the error box shows the given message
   async expectError(msg: string) { await expect(this.error).toHaveText(msg); }
 }
 ```
@@ -287,13 +348,13 @@ export class LoginPage {
 ```ts
 // tests/login.spec.ts
 import { test } from '@playwright/test';
-import { LoginPage } from '../pages/LoginPage';
+import { LoginPage } from '../pages/LoginPage';   // our page object
 
 test('rejects a wrong password', async ({ page }) => {
-  const login = new LoginPage(page);
-  await login.goto();
-  await login.login('user@test.com', 'wrong');
-  await login.expectError('Invalid credentials');
+  const login = new LoginPage(page);           // wrap the test's page
+  await login.goto();                          // open /login
+  await login.login('user@test.com', 'wrong'); // try a bad password
+  await login.expectError('Invalid credentials'); // the app must show an error
 });
 ```
 
@@ -305,15 +366,19 @@ Use a **setup project** that logs in and saves cookies and localStorage to a fil
 
 ```ts
 // tests/auth.setup.ts
+// Runs ONCE before the other tests: logs in and saves the session to a file
 import { test as setup, expect } from '@playwright/test';
-const authFile = 'playwright/.auth/user.json';
+const authFile = 'playwright/.auth/user.json';   // where cookies + localStorage are saved
 
 setup('authenticate', async ({ page }) => {
   await page.goto('/login');
+  // Read credentials from environment variables, never hard-code them
   await page.getByLabel('Email').fill(process.env.USER_EMAIL!);
   await page.getByLabel('Password').fill(process.env.USER_PASSWORD!);
   await page.getByRole('button', { name: 'Sign in' }).click();
+  // Make sure login really worked before saving
   await expect(page.getByText('Dashboard')).toBeVisible();
+  // Save the logged-in state (cookies, localStorage) to the file
   await page.context().storageState({ path: authFile });
 });
 ```
@@ -321,11 +386,15 @@ setup('authenticate', async ({ page }) => {
 ```ts
 // playwright.config.ts (projects part)
 projects: [
+  // 1) The "setup" project runs only files ending in .setup.ts
   { name: 'setup', testMatch: /.*\.setup\.ts/ },
   {
     name: 'chromium',
-    use: { ...devices['Desktop Chrome'], storageState: 'playwright/.auth/user.json' },
-    dependencies: ['setup'],
+    use: {
+      ...devices['Desktop Chrome'],                 // Chrome window size, user agent, etc.
+      storageState: 'playwright/.auth/user.json',   // start every test already logged in
+    },
+    dependencies: ['setup'],                        // run "setup" first
   },
 ],
 ```
@@ -337,16 +406,20 @@ Add `playwright/.auth` to `.gitignore`; the file holds live session tokens. For 
 ```ts
 import { test, expect } from '@playwright/test';
 
+// `request` is a built-in API client: no browser is opened
 test('create and fetch a project via API', async ({ request }) => {
+  // Send a POST request with a JSON body and an auth header
   const create = await request.post('/api/projects', {
     data: { name: 'Metro Line 3', budgetCr: 1200 },
     headers: { Authorization: `Bearer ${process.env.API_TOKEN}` },
   });
-  expect(create.status()).toBe(201);
-  const { id } = await create.json();
+  expect(create.status()).toBe(201);        // 201 = Created
+  const { id } = await create.json();       // read the new project's id from the response
 
+  // Fetch the same project back by id
   const get = await request.get(`/api/projects/${id}`);
-  await expect(get).toBeOK();
+  await expect(get).toBeOK();               // status is 200-299
+  // The response must contain at least these fields (extra fields are allowed)
   expect(await get.json()).toMatchObject({ name: 'Metro Line 3' });
 });
 ```
@@ -356,23 +429,24 @@ A common hybrid pattern seeds data through the API, checks it in the UI, then cl
 ### 3.4 Network interception and mocking
 
 ```ts
-// mock a response
+// MOCK: when the page calls /api/projects, return fake data instead of the real server
 await page.route('**/api/projects', route =>
   route.fulfill({ status: 200, json: [{ id: 1, name: 'Mocked project' }] }));
 
-// modify a real response
+// MODIFY: let the real request go through, then change the response
 await page.route('**/api/user', async route => {
-  const response = await route.fetch();
+  const response = await route.fetch();     // call the real server
   const json = await response.json();
-  json.role = 'admin';
-  await route.fulfill({ response, json });
+  json.role = 'admin';                      // pretend the user is an admin
+  await route.fulfill({ response, json });  // send the edited response to the page
 });
 
-// simulate failures and block noise
+// FAIL: simulate a server error to test the app's error screen
 await page.route('**/api/report', route => route.fulfill({ status: 500 }));
+// BLOCK: skip images and fonts to make tests faster
 await page.route('**/*.{png,jpg,woff2}', route => route.abort());
 
-// record and replay with a HAR file
+// REPLAY: answer API calls from a recorded HAR file (update: true re-records it)
 await page.routeFromHAR('hars/api.har', { url: '**/api/**', update: false });
 ```
 
@@ -381,23 +455,24 @@ Register routes **before** the navigation or action that triggers the request.
 ### 3.5 Frames, new tabs, popups and dialogs
 
 ```ts
-// iframe
+// IFRAME: step inside the payment iframe, then find elements as usual
 const frame = page.frameLocator('#payment-iframe');
 await frame.getByLabel('Card number').fill('4242 4242 4242 4242');
 
-// new tab opened by a link
+// NEW TAB: start waiting for the new tab BEFORE clicking the link that opens it
 const pagePromise = context.waitForEvent('page');
 await page.getByRole('link', { name: 'Open report' }).click();
-const newTab = await pagePromise;
-await newTab.waitForLoadState();
+const newTab = await pagePromise;          // the new tab's Page object
+await newTab.waitForLoadState();           // wait for it to finish loading
 await expect(newTab).toHaveTitle(/Report/);
 
-// popup window
+// POPUP: same idea for a window opened with window.open()
 const popupPromise = page.waitForEvent('popup');
 await page.getByText('Help').click();
 const popup = await popupPromise;
 
-// JS alert / confirm / prompt (auto-dismissed unless handled)
+// DIALOG: alert/confirm/prompt boxes are dismissed automatically unless you handle them.
+// Here we register a one-time handler that clicks "OK"
 page.once('dialog', d => d.accept());
 await page.getByRole('button', { name: 'Delete' }).click();
 ```
@@ -405,15 +480,17 @@ await page.getByRole('button', { name: 'Delete' }).click();
 ### 3.6 File upload and download
 
 ```ts
-// upload
+// UPLOAD: put a local file into an <input type="file">
 await page.getByLabel('Attach file').setInputFiles('fixtures/report.pdf');
-await page.getByLabel('Attach file').setInputFiles([]);   // clear
+await page.getByLabel('Attach file').setInputFiles([]);   // remove the selected file
 
-// download
+// DOWNLOAD: start waiting first, then click the button that triggers the download
 const downloadPromise = page.waitForEvent('download');
 await page.getByRole('button', { name: 'Export CSV' }).click();
 const download = await downloadPromise;
+// Check the file name the server suggested ends in .csv
 expect(download.suggestedFilename()).toMatch(/\.csv$/);
+// Save the file to the downloads folder so you can inspect it
 await download.saveAs('downloads/' + download.suggestedFilename());
 ```
 
@@ -423,12 +500,16 @@ await download.saveAs('downloads/' + download.suggestedFilename());
 - Data-driven tests: loop over an array and create one `test()` per item, giving each a unique title.
 
 ```ts
+// Test data: one entry per case we want to check
 const users = [
   { role: 'admin', canDelete: true },
   { role: 'viewer', canDelete: false },
 ];
+// Create one separate test per entry; the title must be unique, so include the role
 for (const u of users) {
-  test(`delete button for ${u.role}`, async ({ page }) => { /* ... */ });
+  test(`delete button for ${u.role}`, async ({ page }) => {
+    /* log in as u.role, then check the Delete button matches u.canDelete */
+  });
 }
 ```
 
@@ -440,37 +521,44 @@ At this level you control how the suite runs: configuration, parallelism, custom
 
 ```ts
 import { defineConfig, devices } from '@playwright/test';
-import 'dotenv/config';
+import 'dotenv/config';                  // loads variables from a .env file into process.env
 
 export default defineConfig({
-  testDir: './tests',
-  timeout: 30_000,                       // per test
-  expect: { timeout: 5_000 },
-  fullyParallel: true,
-  forbidOnly: !!process.env.CI,          // fail CI if test.only is committed
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 4 : undefined,
+  testDir: './tests',                    // where to look for test files
+  timeout: 30_000,                       // max time for one test: 30 s
+  expect: { timeout: 5_000 },            // max time one expect() keeps retrying: 5 s
+  fullyParallel: true,                   // run tests inside a file in parallel too
+  forbidOnly: !!process.env.CI,          // on CI, fail if someone committed test.only
+  retries: process.env.CI ? 2 : 0,       // retry failed tests twice on CI, never locally
+  workers: process.env.CI ? 4 : undefined, // 4 parallel processes on CI; local = auto
+  // Several reports at once: HTML for people, list for the console, JUnit for CI tools
   reporter: [['html', { open: 'never' }], ['list'], ['junit', { outputFile: 'results.xml' }]],
+
+  // Settings shared by every test
   use: {
-    baseURL: process.env.BASE_URL ?? 'http://localhost:3000',
-    trace: 'on-first-retry',
-    screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
-    actionTimeout: 10_000,
-    locale: 'en-IN',
-    timezoneId: 'Asia/Kolkata',
+    baseURL: process.env.BASE_URL ?? 'http://localhost:3000', // page.goto('/x') uses this
+    trace: 'on-first-retry',             // record a trace when a test is retried
+    screenshot: 'only-on-failure',       // keep screenshots only for failed tests
+    video: 'retain-on-failure',          // keep videos only for failed tests
+    actionTimeout: 10_000,               // max time for one click/fill: 10 s
+    locale: 'en-IN',                     // browser language and number format
+    timezoneId: 'Asia/Kolkata',          // browser time zone (IST)
   },
+
+  // Projects = the same tests run in different setups
   projects: [
-    { name: 'setup', testMatch: /.*\.setup\.ts/ },
+    { name: 'setup', testMatch: /.*\.setup\.ts/ },  // login step, runs first
     { name: 'chromium', use: { ...devices['Desktop Chrome'] }, dependencies: ['setup'] },
     { name: 'firefox',  use: { ...devices['Desktop Firefox'] }, dependencies: ['setup'] },
     { name: 'webkit',   use: { ...devices['Desktop Safari'] }, dependencies: ['setup'] },
-    { name: 'mobile',   use: { ...devices['Pixel 7'] }, dependencies: ['setup'] },
+    { name: 'mobile',   use: { ...devices['Pixel 7'] }, dependencies: ['setup'] }, // phone emulation
   ],
+
+  // Start the app automatically before the tests
   webServer: {
-    command: 'npm run start',
-    url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
+    command: 'npm run start',            // how to start the app
+    url: 'http://localhost:3000',        // wait until this URL responds
+    reuseExistingServer: !process.env.CI, // locally, reuse an app you already started
   },
 });
 ```
@@ -482,9 +570,12 @@ export default defineConfig({
 - **Sharding** splits the suite across machines:
 
 ```bash
+# Split the suite into 4 equal parts; each machine runs one part
 npx playwright test --shard=1/4   # on machine 1
-npx playwright test --shard=2/4   # on machine 2 ...
-# merge the blob reports afterwards
+npx playwright test --shard=2/4   # on machine 2 (and so on up to 4/4)
+
+# Afterwards, copy every machine's blob report into one folder
+# and merge them into a single HTML report
 npx playwright merge-reports --reporter html ./all-blob-reports
 ```
 
@@ -500,33 +591,42 @@ import { test as base, expect } from '@playwright/test';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 
+// Describe the type of each custom fixture we are adding
 type Fixtures = {
   loginPage: LoginPage;
   dashboard: DashboardPage;
   testProject: { id: number; name: string };
 };
 
+// base.extend() creates a new `test` that knows about our fixtures
 export const test = base.extend<Fixtures>({
+  // Page-object fixtures: build the object and hand it to the test with use()
   loginPage: async ({ page }, use) => { await use(new LoginPage(page)); },
   dashboard: async ({ page }, use) => { await use(new DashboardPage(page)); },
 
-  // setup + teardown around the test
+  // Data fixture with setup AND teardown in one place
   testProject: async ({ request }, use) => {
+    // SETUP: create a project through the API with a unique name
     const res = await request.post('/api/projects', { data: { name: `pw-${Date.now()}` } });
     const project = await res.json();
-    await use(project);                                   // test runs here
-    await request.delete(`/api/projects/${project.id}`);  // cleanup always runs
+    await use(project);                                   // the test runs here
+    // TEARDOWN: runs after the test, even if the test failed
+    await request.delete(`/api/projects/${project.id}`);
   },
 });
+// Re-export expect so tests import everything from one file
 export { expect };
 ```
 
 ```ts
 // tests/project.spec.ts
+// Import from OUR fixtures file, not from '@playwright/test'
 import { test, expect } from '../fixtures';
 
+// Just name the fixtures you need: Playwright creates them (and cleans up) for you
 test('project appears on dashboard', async ({ dashboard, testProject }) => {
   await dashboard.goto();
+  // testProject was created by the fixture, so we know its name
   await expect(dashboard.projectRow(testProject.name)).toBeVisible();
 });
 ```
@@ -536,13 +636,16 @@ Worker-scoped fixtures (`{ scope: 'worker' }`) are created once per worker, for 
 ### 4.4 Visual regression testing
 
 ```ts
+// Compare the page with a saved baseline image called dashboard.png
 await expect(page).toHaveScreenshot('dashboard.png', {
-  fullPage: true,
-  maxDiffPixelRatio: 0.01,
-  mask: [page.locator('.timestamp'), page.locator('.avatar')],   // hide dynamic parts
-  animations: 'disabled',
+  fullPage: true,                 // capture the whole scrollable page
+  maxDiffPixelRatio: 0.01,        // allow up to 1% of pixels to differ
+  // Cover parts that change on every run so they don't cause false failures
+  mask: [page.locator('.timestamp'), page.locator('.avatar')],
+  animations: 'disabled',         // stop CSS animations before capturing
 });
-await expect(page.getByTestId('chart')).toHaveScreenshot();      // a single element
+// Compare just one element instead of the whole page
+await expect(page.getByTestId('chart')).toHaveScreenshot();
 ```
 
 The first run writes the baseline. Update baselines with `npx playwright test --update-snapshots`. Baselines depend on OS and browser, so generate them in the same Docker image CI uses.
@@ -571,14 +674,16 @@ For structure rather than pixels, use ARIA snapshots: `await expect(page.getByRo
 ### 4.7 Emulation
 
 ```ts
+// test.use() changes browser settings for the tests in this file or describe block
 test.use({
-  ...devices['iPhone 15'],
-  geolocation: { latitude: 28.6139, longitude: 77.2090 },   // New Delhi
-  permissions: ['geolocation'],
-  colorScheme: 'dark',
-  offline: false,
+  ...devices['iPhone 15'],                                  // screen size, touch, mobile user agent
+  geolocation: { latitude: 28.6139, longitude: 77.2090 },   // pretend to be in New Delhi
+  permissions: ['geolocation'],                             // allow location access without a prompt
+  colorScheme: 'dark',                                      // dark mode
+  offline: false,                                           // set true to test offline behaviour
 });
-// clock control for time-dependent UI
+
+// Freeze the browser clock at a fixed date and time (useful for date-based UI)
 await page.clock.setFixedTime(new Date('2026-03-31T10:00:00+05:30'));
 ```
 
@@ -591,39 +696,47 @@ Expert work is less about API calls and more about building a suite a team can t
 ```yaml
 # .github/workflows/playwright.yml
 name: e2e
-on: [push, pull_request]
+on: [push, pull_request]            # run on every push and pull request
+
 jobs:
+  # JOB 1: run the tests, split across 4 parallel machines
   test:
     runs-on: ubuntu-latest
-    container: mcr.microsoft.com/playwright:v1.65.0-noble   # match your package version
+    # Official image with browsers pre-installed; keep the tag equal to your package version
+    container: mcr.microsoft.com/playwright:v1.65.0-noble
     strategy:
-      fail-fast: false
-      matrix: { shard: [1, 2, 3, 4] }
+      fail-fast: false                # let all shards finish even if one fails
+      matrix: { shard: [1, 2, 3, 4] } # creates 4 copies of this job
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4     # get the repository code
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      - run: npm ci
+      - run: npm ci                   # install exact versions from package-lock.json
+      # Each copy runs its quarter of the suite and writes a "blob" report
       - run: npx playwright test --shard=${{ matrix.shard }}/4 --reporter=blob
-        env:
+        env:                          # secrets come from repo settings, not from code
           BASE_URL: ${{ secrets.BASE_URL }}
           USER_PASSWORD: ${{ secrets.USER_PASSWORD }}
+      # Save the blob report even when tests fail (if: always())
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: blob-${{ matrix.shard }}, path: blob-report, retention-days: 7 }
 
+  # JOB 2: combine the 4 blob reports into one HTML report
   merge:
-    needs: test
-    if: always()
+    needs: test                       # wait for all test shards
+    if: always()                      # merge even if some tests failed
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: npm ci
+      # Download every blob-* artifact into one folder
       - uses: actions/download-artifact@v4
         with: { path: all-blob-reports, pattern: blob-*, merge-multiple: true }
       - run: npx playwright merge-reports --reporter html ./all-blob-reports
+      # Publish the final HTML report so you can download and open it
       - uses: actions/upload-artifact@v4
         with: { name: html-report, path: playwright-report }
 ```
@@ -646,17 +759,17 @@ Process: run with `--repeat-each=20 --workers=4` to reproduce. Read the trace fr
 
 ```text
 e2e/
-├── playwright.config.ts
-├── fixtures/            # base.extend: page objects, data, API clients
-├── pages/               # page objects and components (Header, DataTable)
-├── api/                 # typed API clients for seeding and cleanup
-├── data/                # factories and builders, not static JSON dumps
-├── utils/               # date helpers, env config, custom matchers
+├── playwright.config.ts # one config: projects per browser and environment
+├── fixtures/            # base.extend: page objects, test data, API clients for tests
+├── pages/               # page objects and shared components (Header, DataTable)
+├── api/                 # typed API clients used to create and delete test data
+├── data/                # factories that build fresh data (not static JSON dumps)
+├── utils/               # date helpers, environment config, custom matchers
 ├── tests/
-│   ├── smoke/           # @smoke: under 5 minutes, runs on every PR
-│   ├── regression/      # nightly, all browsers
-│   └── api/
-└── reporters/           # custom reporter (Slack, dashboard)
+│   ├── smoke/           # @smoke: quick checks, under 5 minutes, run on every PR
+│   ├── regression/      # full suite, run nightly on all browsers
+│   └── api/             # API-only tests (no browser)
+└── reporters/           # custom reporter, e.g. post results to Slack or a dashboard
 ```
 
 Principles:
@@ -678,11 +791,14 @@ Principles:
 ### 5.5 Accessibility testing
 
 ```ts
+// Install first: npm i -D @axe-core/playwright
 import AxeBuilder from '@axe-core/playwright';
 
 test('dashboard has no serious a11y violations', async ({ page }) => {
   await page.goto('/dashboard');
+  // Scan the page against WCAG 2.0 level A and AA rules
   const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+  // Keep only serious and critical problems; the test fails if any remain
   expect(results.violations.filter(v => ['serious', 'critical'].includes(v.impact!))).toEqual([]);
 });
 ```
@@ -692,15 +808,16 @@ Role-based locators give you basic accessibility coverage for free: if `getByRol
 ### 5.6 Component testing (experimental)
 
 ```ts
-// Button.spec.tsx  (@playwright/experimental-ct-react)
+// Button.spec.tsx  (package: @playwright/experimental-ct-react)
 import { test, expect } from '@playwright/experimental-ct-react';
-import { Button } from './Button';
+import { Button } from './Button';   // the React component under test
 
 test('calls onClick', async ({ mount }) => {
-  let clicked = false;
+  let clicked = false;                // will flip to true when the button is clicked
+  // mount() renders just this component in a real browser
   const c = await mount(<Button label="Save" onClick={() => (clicked = true)} />);
-  await c.click();
-  expect(clicked).toBe(true);
+  await c.click();                    // click the rendered button
+  expect(clicked).toBe(true);         // our onClick handler must have run
 });
 ```
 
